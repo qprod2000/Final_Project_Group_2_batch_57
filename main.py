@@ -7,20 +7,23 @@ MODEL_PATH = "model_tiket.pkl"
 META_PATH = "model_meta.pkl"
 
 # =========================
-# LOAD DATA
+# LOAD DATA (SAFE VERSION)
 # =========================
 @st.cache_data
 def load_data():
     df = pd.read_csv("airlines_flights_data.csv")
 
-    # 🔥 HAPUS KOLOM TIDAK PERLU
+    # 🔥 Hapus kolom tidak perlu
     df = df.drop(columns=[col for col in ["index", "flight"] if col in df.columns])
 
-    # 🔥 FIX TIPE DATA
+    # 🔥 Bersihkan nilai aneh
+    df = df.replace(["None", "nan", ""], pd.NA)
+
+    # 🔥 Paksa object jadi string
     for col in df.select_dtypes(include="object").columns:
         df[col] = df[col].astype(str)
 
-    # 🔥 MAPPING WAKTU INDONESIA
+    # 🔥 Mapping waktu Indonesia
     time_map = {
         "Early_Morning": "Dini hari",
         "Morning": "Pagi",
@@ -33,7 +36,7 @@ def load_data():
         if col in df.columns:
             df[col] = df[col].replace(time_map)
 
-    # 🔥 MAPPING KELAS
+    # 🔥 Mapping kelas
     if "class" in df.columns:
         df["class"] = df["class"].replace({
             "Economy": "Ekonomi",
@@ -79,16 +82,13 @@ def advisor(input_data):
 # UI
 # =========================
 st.set_page_config(page_title="AI Flight Price Advisor", layout="wide")
-st.title("✈️ AI Flight Price Advisor (Indonesia - Final Clean Version)")
+st.title("✈️ AI Flight Price Advisor (Final Stable Version)")
 
 df = load_data()
 model, meta = load_model()
 
 st.success(f"Model: {meta['model']} | MAE: {meta['mae']:.2f}")
 
-# =========================
-# INPUT
-# =========================
 feature_cols = df.drop(columns=["price"]).columns
 
 col1, col2 = st.columns(2)
@@ -98,15 +98,12 @@ for i, col in enumerate(feature_cols):
     container = col1 if i % 2 == 0 else col2
 
     # =========================
-    # 🔥 DURATION (15 MENIT STEP)
+    # 🔥 DURATION (15 MENIT)
     # =========================
     if col.lower() == "duration":
         val = container.slider(
             "Durasi (jam)",
-            min_value=0.0,
-            max_value=24.0,
-            value=1.0,
-            step=0.25
+            0.0, 24.0, 1.0, step=0.25
         )
 
         hours = int(val)
@@ -117,18 +114,14 @@ for i, col in enumerate(feature_cols):
         input_data[col] = val
 
     # =========================
-    # 🔥 SPECIAL: DAYS LEFT (STEP 0.5 HARI)
+    # 🔥 DAYS LEFT (0.5 HARI)
     # =========================
     elif col.lower() == "days_left":
         val = container.slider(
-        "Sisa Hari Pemesanan",
-        min_value=0.0,
-        max_value=30.0,
-        value=10.0,
-        step=0.5
-    )
+            "Sisa Hari Pemesanan",
+            0.0, 30.0, 10.0, step=0.5
+        )
 
-        # tampilkan format hari + jam
         days = int(val)
         hours = int((val - days) * 24)
 
@@ -136,21 +129,33 @@ for i, col in enumerate(feature_cols):
 
         input_data[col] = val
 
-# =========================
-# NUMERIC
-# =========================
-# elif ptypes.is_numeric_dtype(df[col]):
-    input_data[col] = container.slider(
-        col,
-        float(df[col].min()),
-        float(df[col].max()),
-        float(df[col].mean())
-    )
+    # =========================
+    # 🔥 NUMERIC (SAFE)
+    # =========================
+    elif ptypes.is_numeric_dtype(df[col]):
+        try:
+            num_series = pd.to_numeric(df[col], errors="coerce")
 
-# =========================
-# CATEGORICAL
-# =========================
-else:
+            min_val = float(num_series.min())
+            max_val = float(num_series.max())
+            mean_val = float(num_series.mean())
+
+            input_data[col] = container.slider(
+                col,
+                min_val,
+                max_val,
+                mean_val
+            )
+        except:
+            input_data[col] = container.selectbox(
+                col,
+                sorted(df[col].dropna().astype(str).unique())
+            )
+
+    # =========================
+    # 🔥 CATEGORICAL
+    # =========================
+    else:
         input_data[col] = container.selectbox(
             col,
             sorted(df[col].dropna().astype(str).unique())
