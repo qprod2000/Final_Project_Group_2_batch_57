@@ -40,7 +40,7 @@ input_stops_map = {
     "more than two": "2+ Transit",
     "0 stops": "Langsung",
     "1 stop": "1 Transit",
-    "2 stops": "2 Transit"
+    "2 stops": "2 Transit",
     "2+ stops": "2+ Transit"
 }
 
