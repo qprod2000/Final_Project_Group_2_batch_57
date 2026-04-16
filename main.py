@@ -21,7 +21,7 @@ display_map = {
     "1 Transit": "1 Transit",
     "2 Transit": "2 Transit",
     "3 Transit": "3 Transit",
-    "2+ Transit": "2+ Transit"
+    "2+ Transit": "2+ Transit",
 }
 
 reverse_map = {
@@ -29,7 +29,7 @@ reverse_map = {
     "1 Transit": "1 stop",
     "2 Transit": "2 stops",
     "3 Transit": "3 stops",
-    "2+ Transit": "2 stops"
+    "2+ Transit": "2 stops",
 }
 
 # 🔥 INPUT MAP (INI YANG FIX MASALAH KAMU)
@@ -41,14 +41,14 @@ input_stops_map = {
     "0 stops": "Langsung",
     "1 stop": "1 Transit",
     "2 stops": "2 Transit",
-    "2+ stops": "2+ Transit"
+    "2+ stops": "2+ Transit",
 }
 
 reverse_input_map = {
     "Langsung": "zero",
     "1 Transit": "one",
     "2 Transit": "two",
-    "2+ Transit": "more than two"
+    "2+ Transit": "more than two",
 }
 
 
@@ -72,7 +72,7 @@ def load_data():
         "Afternoon": "Siang",
         "Evening": "Sore",
         "Night": "Malam",
-        "Late_Night": "Larut malam"
+        "Late_Night": "Larut malam",
     }
 
     for col in ["departure_time", "arrival_time"]:
