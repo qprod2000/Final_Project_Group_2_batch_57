@@ -13,17 +13,13 @@ META_PATH = "model_meta.pkl"
 def load_data():
     df = pd.read_csv("airlines_flights_data.csv")
 
-    # Hapus kolom tidak perlu
     df = df.drop(columns=[col for col in ["index"] if col in df.columns])
-
-    # Bersihkan data
     df = df.replace(["None", "nan", ""], pd.NA)
 
-    # Paksa string
     for col in df.select_dtypes(include="object").columns:
         df[col] = df[col].astype(str)
 
-    # Mapping waktu
+    # Mapping waktu (tetap punyamu)
     time_map = {
         "Early_Morning": "Dini hari",
         "Morning": "Pagi",
@@ -57,28 +53,44 @@ def load_model():
 
 
 # =========================
-# AI FLIGHT ENGINE
+# LABEL MAP (🔥 FINAL)
+# =========================
+label_map = {
+    "airline": "Maskapai",
+    "source": "Kota Asal",
+    "source_city": "Kota Asal",
+    "destination": "Kota Tujuan",
+    "destination_city": "Kota Tujuan",
+    "departure_time": "Waktu Keberangkatan",
+    "arrival_time": "Waktu Kedatangan",
+    "stops": "Jumlah Transit",
+    "duration": "Durasi Perjalanan",
+    "days_left": "Sisa Hari Pemesanan",
+    "class": "Kelas Penerbangan"
+}
+
+
+# =========================
+# AI ENGINE
 # =========================
 def find_best_flights(df, model, input_data, top_n=5):
 
-    # ambil kombinasi unik
     flight_options = df[["airline", "flight", "stops"]].drop_duplicates()
 
-    # 🔥 biar tidak berat
     if len(flight_options) > 1000:
         flight_options = flight_options.sample(500, random_state=42)
 
     results = []
 
     for _, row in flight_options.iterrows():
-        temp_input = input_data.copy()
+        temp = input_data.copy()
 
-        temp_input["airline"] = row["airline"]
-        temp_input["flight"] = row["flight"]
-        temp_input["stops"] = row["stops"]
+        temp["airline"] = row["airline"]
+        temp["flight"] = row["flight"]
+        temp["stops"] = row["stops"]
 
         try:
-            pred = model.predict(pd.DataFrame([temp_input]))[0]
+            pred = model.predict(pd.DataFrame([temp]))[0]
 
             results.append({
                 "airline": row["airline"],
@@ -90,32 +102,14 @@ def find_best_flights(df, model, input_data, top_n=5):
             continue
 
     results = sorted(results, key=lambda x: x["price"])
-
     return results[:top_n]
-
-
-# =========================
-# ADVISOR
-# =========================
-def advisor(input_data):
-    recs = []
-
-    if input_data.get("days_left", 0) < 5:
-        recs.append("⚠️ Booking terlalu dekat → harga tinggi")
-    elif input_data.get("days_left", 0) > 20:
-        recs.append("💰 Booking lebih awal → lebih hemat")
-
-    if input_data.get("duration", 0) > 5:
-        recs.append("⏱ Durasi panjang → pertimbangkan direct flight")
-
-    return recs
 
 
 # =========================
 # UI
 # =========================
 st.set_page_config(page_title="AI Flight Advisor", layout="wide")
-st.title("✈️ AI Flight Price Advisor (Smart Recommender)")
+st.title("✈️ AI Flight Price Advisor")
 
 df = load_data()
 model, meta = load_model()
@@ -146,6 +140,7 @@ if dest_col:
         sorted(df[dest_col].dropna().unique())
     )
 
+
 # =========================
 # INPUT LAIN
 # =========================
@@ -155,14 +150,16 @@ col1, col2 = st.columns(2)
 
 for i, col in enumerate(feature_cols):
 
+    # skip kolom tertentu
     if col in ["airline", "flight", "source", "destination", "source_city", "destination_city"]:
         continue
 
     container = col1 if i % 2 == 0 else col2
+    label = label_map.get(col, col)
 
     # DURATION
     if col.lower() == "duration":
-        val = container.slider("Durasi", 0.0, 24.0, 1.0, step=0.25)
+        val = container.slider(label, 0.0, 24.0, 1.0, step=0.25)
 
         hours = int(val)
         minutes = int((val - hours) * 60)
@@ -172,7 +169,7 @@ for i, col in enumerate(feature_cols):
 
     # DAYS LEFT
     elif col.lower() == "days_left":
-        val = container.slider("Sisa Hari", 0.0, 30.0, 10.0, step=0.5)
+        val = container.slider(label, 0.0, 30.0, 10.0, step=0.5)
 
         days = int(val)
         hours = int((val - days) * 24)
@@ -186,21 +183,21 @@ for i, col in enumerate(feature_cols):
             num = pd.to_numeric(df[col], errors="coerce")
 
             input_data[col] = container.slider(
-                col,
+                label,
                 float(num.min()),
                 float(num.max()),
                 float(num.mean())
             )
         except:
             input_data[col] = container.selectbox(
-                col,
+                label,
                 sorted(df[col].dropna().astype(str).unique())
             )
 
     # CATEGORICAL
     else:
         input_data[col] = container.selectbox(
-            col,
+            label,
             sorted(df[col].dropna().astype(str).unique())
         )
 
@@ -221,7 +218,3 @@ if st.button("🔍 Cari Penerbangan Terbaik"):
             f"{i}. ✈️ {r['airline']} ({r['flight']}) | "
             f"{stops_label} | 💰 Rp {int(r['price']):,}"
         )
-
-    st.subheader("🤖 Insight AI")
-    for r in advisor(input_data):
-        st.write("-", r)
