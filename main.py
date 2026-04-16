@@ -61,7 +61,32 @@ def _safe_number(value):
         return 0.0
 
 
-def advisor(input_data):
+def recommend_airline(input_data, df):
+    if "airline" not in df.columns:
+        return None
+
+    route_cols = ["source_city", "destination_city", "class", "stops", "departure_time"]
+    fallback_sets = [
+        route_cols,
+        ["source_city", "destination_city", "class", "stops"],
+        ["source_city", "destination_city", "class"],
+        ["source_city", "destination_city"],
+    ]
+
+    for cols in fallback_sets:
+        if not all(col in df.columns for col in cols):
+            continue
+        mask = pd.Series(True, index=df.index)
+        for col in cols:
+            mask &= df[col] == input_data.get(col)
+        subset = df[mask]
+        if not subset.empty:
+            return subset.groupby("airline")["price"].mean().sort_values().index[0]
+
+    return df.groupby("airline")["price"].mean().sort_values().index[0]
+
+
+def advisor(input_data, df):
     recs = []
     days_left = _safe_number(input_data.get("days_left", 0))
     stops = _safe_number(input_data.get("stops", 0))
@@ -76,8 +101,12 @@ def advisor(input_data):
     else:
         recs.append("✈️ Direct flight lebih cepat tapi mahal")
 
-    if input_data.get("class") == "bisnis":
+    if input_data.get("class") == "Bisnis":
         recs.append("💺 Kelas bisnis meningkatkan harga signifikan")
+
+    best_airline = recommend_airline(input_data, df)
+    if best_airline:
+        recs.append(f"✈️ Rekomendasi maskapai: {best_airline}")
 
     return recs
 
@@ -132,5 +161,5 @@ if st.button("🔍 Prediksi & Rekomendasi"):
 
     with c2:
         st.subheader("Rekomendasi AI")
-        for r in advisor(input_data):
+        for r in advisor(input_data, df):
             st.write("-", r)
