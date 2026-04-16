@@ -1,20 +1,24 @@
-import pandas as pd # type: ignore
-import joblib   # type: ignore
+import pandas as pd
+import joblib
 
-from sklearn.model_selection import train_test_split    # type: ignore
-from sklearn.metrics import mean_absolute_error # type: ignore
-from sklearn.preprocessing import OneHotEncoder # type: ignore
-from sklearn.compose import ColumnTransformer   # type: ignore
-from sklearn.pipeline import Pipeline   # type: ignore
-from sklearn.ensemble import RandomForestRegressor # type: ignore
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_absolute_error
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+from sklearn.ensemble import RandomForestRegressor
 
 # =========================
-# LOAD DATA (DI-RINGANKAN)
+# LOAD DATA
 # =========================
 df = pd.read_csv("airlines_flights_data.csv")
 
-# 🔥 SAMPLE DATA BIAR TIDAK MACET
+# 🔥 ambil sample biar ringan
 df = df.sample(n=min(5000, len(df)), random_state=42)
+
+# pastikan object jadi string
+for col in df.select_dtypes(include="object").columns:
+    df[col] = df[col].astype(str)
 
 target = "price" if "price" in df.columns else df.columns[-1]
 
@@ -24,8 +28,8 @@ y = df[target]
 # =========================
 # PREPROCESS
 # =========================
-cat_cols = X.select_dtypes(include=["object"]).columns
-num_cols = X.select_dtypes(exclude=["object"]).columns
+cat_cols = X.select_dtypes(include="object").columns
+num_cols = X.select_dtypes(exclude="object").columns
 
 preprocessor = ColumnTransformer([
     ("cat", OneHotEncoder(handle_unknown="ignore"), cat_cols),
@@ -33,7 +37,7 @@ preprocessor = ColumnTransformer([
 ])
 
 # =========================
-# MODEL (RINGAN & CEPAT)
+# MODEL (RINGAN)
 # =========================
 model = RandomForestRegressor(
     n_estimators=40,
@@ -58,7 +62,7 @@ pred = pipeline.predict(X_test)
 mae = mean_absolute_error(y_test, pred)
 
 # =========================
-# SAVE MODEL
+# SAVE
 # =========================
 joblib.dump(pipeline, "model_tiket.pkl")
 joblib.dump({
