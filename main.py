@@ -7,7 +7,7 @@ MODEL_PATH = "model_tiket.pkl"
 META_PATH = "model_meta.pkl"
 
 # =========================
-# GLOBAL MAPPING (🔥 FINAL)
+# GLOBAL MAP (FINAL)
 # =========================
 display_map = {
     "0 stops": "Langsung",
@@ -32,14 +32,21 @@ reverse_map = {
     "2+ Transit": "2 stops"
 }
 
-normalize_map = {
+# 🔥 INPUT MAP (INI YANG FIX MASALAH KAMU)
+input_stops_map = {
     "zero": "Langsung",
     "one": "1 Transit",
     "two or more": "2+ Transit",
     "0 stops": "Langsung",
     "1 stop": "1 Transit",
-    "2 stops": "2 Transit",
-    "3 stops": "3 Transit"
+    "2 stops": "2 Transit"
+}
+
+reverse_input_map = {
+    "Langsung": "zero",
+    "1 Transit": "one",
+    "2 Transit": "two or more",
+    "2+ Transit": "two or more"
 }
 
 
@@ -124,11 +131,10 @@ def find_best_flights(df, model, input_data, top_n=5):
         temp["airline"] = row["airline"]
         temp["flight"] = row["flight"]
 
-        # 🔥 NORMALISASI STOP (FINAL FIX)
+        # 🔥 normalize stops
         raw = str(row["stops"]).lower().strip()
-        normalized = normalize_map.get(raw, row["stops"])
+        normalized = input_stops_map.get(raw, row["stops"])
 
-        # kirim ke model
         temp["stops"] = reverse_map.get(normalized, normalized)
 
         try:
@@ -137,15 +143,13 @@ def find_best_flights(df, model, input_data, top_n=5):
             results.append({
                 "airline": row["airline"],
                 "flight": row["flight"],
-                "stops": normalized,  # untuk display
+                "stops": normalized,
                 "price": pred
             })
         except:
             continue
 
-    results = sorted(results, key=lambda x: x["price"])
-
-    return results[:top_n]
+    return sorted(results, key=lambda x: x["price"])[:top_n]
 
 
 # =========================
@@ -199,6 +203,7 @@ for i, col in enumerate(feature_cols):
     container = col1 if i % 2 == 0 else col2
     label = label_map.get(col, col)
 
+    # DURATION
     if col.lower() == "duration":
         val = container.slider(label, 0.0, 24.0, 1.0, step=0.25)
 
@@ -208,6 +213,7 @@ for i, col in enumerate(feature_cols):
         container.caption(f"{h} jam {m} menit")
         input_data[col] = val
 
+    # DAYS LEFT
     elif col.lower() == "days_left":
         val = container.slider(label, 0.0, 30.0, 10.0, step=0.5)
 
@@ -217,6 +223,20 @@ for i, col in enumerate(feature_cols):
         container.caption(f"{d} hari {h} jam")
         input_data[col] = val
 
+    # 🔥 STOPS (FIX FINAL)
+    elif col.lower() == "stops":
+        raw_options = sorted(df[col].dropna().astype(str).unique())
+
+        display_options = [
+            input_stops_map.get(opt.lower(), opt)
+            for opt in raw_options
+        ]
+
+        selected = container.selectbox(label, display_options)
+
+        input_data[col] = reverse_input_map.get(selected, selected)
+
+    # NUMERIC
     elif ptypes.is_numeric_dtype(df[col]):
         try:
             num = pd.to_numeric(df[col], errors="coerce")
@@ -233,6 +253,7 @@ for i, col in enumerate(feature_cols):
                 sorted(df[col].dropna().astype(str).unique())
             )
 
+    # CATEGORICAL
     else:
         input_data[col] = container.selectbox(
             label,
