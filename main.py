@@ -96,7 +96,7 @@ st.success(f"Model: {meta['model']} | MAE: {meta['mae']:.2f}")
 # =========================
 # INPUT (FIXED VERSION)
 # =========================
-feature_cols = df.drop(columns=["price"]).columns
+feature_cols = df.drop(columns=["price", "index", "flight"]).columns
 
 col1, col2 = st.columns(2)
 input_data = {}
@@ -121,6 +121,8 @@ for i, col in enumerate(feature_cols):
 # PREDIKSI
 # =========================
 if st.button("🔍 Prediksi & Rekomendasi"):
+    input_data.setdefault("index", 0)
+    input_data.setdefault("flight", df["flight"].dropna().astype(str).mode().iloc[0])
     input_df = pd.DataFrame([input_data])
     pred = model.predict(input_df)[0]
 
