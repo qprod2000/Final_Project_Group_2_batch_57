@@ -128,13 +128,13 @@ for i, col in enumerate(feature_cols):
         step=0.5
     )
 
-    # tampilkan format hari + jam
-    days = int(val)
-    hours = int((val - days) * 24)
+        # tampilkan format hari + jam
+        days = int(val)
+        hours = int((val - days) * 24)
 
-    container.caption(f"📅 {days} hari {hours} jam sebelum keberangkatan")
+        container.caption(f"📅 {days} hari {hours} jam sebelum keberangkatan")
 
-    input_data[col] = val
+        input_data[col] = val
 
 # =========================
 # NUMERIC
