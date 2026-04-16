@@ -1,7 +1,7 @@
-import joblib
-import pandas as pd
-import streamlit as st
-import pandas.api.types as ptypes
+import joblib   # type: ignore
+import pandas as pd # type: ignore
+import streamlit as st  # type: ignore
+import pandas.api.types as ptypes   # type: ignore
 
 MODEL_PATH = "model_tiket.pkl"
 META_PATH = "model_meta.pkl"
