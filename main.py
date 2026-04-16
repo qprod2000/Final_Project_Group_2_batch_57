@@ -85,7 +85,7 @@ def advisor(input_data):
 # =========================
 # UI
 # =========================
-st.set_page_config(page_title="AI Flight Price Advisor", layout="wide")
+st.set_page_config(page_title="Aplikasi Prediksi Harga Tiket Pesawat", layout="wide")
 st.title("✈️ Aplikasi Prediksi Harga Tiket Pesawat")
 
 df = load_data()
