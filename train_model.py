@@ -21,8 +21,8 @@ target = "price" if "price" in df.columns else df.columns[-1]
 X = df.drop(columns=[target])
 y = df[target]
 
-cat_cols = X.select_dtypes(include=["object"]).columns
-num_cols = X.select_dtypes(exclude=["object"]).columns
+cat_cols = X.select_dtypes(include=["object", "string"]).columns
+num_cols = X.select_dtypes(exclude=["object", "string"]).columns
 
 preprocessor = ColumnTransformer([
     ("cat", OneHotEncoder(handle_unknown="ignore"), cat_cols),
