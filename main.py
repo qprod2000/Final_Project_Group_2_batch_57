@@ -66,7 +66,7 @@ label_map = {
     "departure_time": "Waktu Keberangkatan",
     "arrival_time": "Waktu Kedatangan",
     "stops": "Jumlah Transit",
-    "duration": "Durasi Penerbangan",
+    "duration": "Durasi Perjalanan",
     "days_left": "Sisa Hari Pemesanan",
     "class": "Kelas Penerbangan"
 }
