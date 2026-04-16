@@ -41,7 +41,7 @@ input_stops_map = {
     "0 stops": "Langsung",
     "1 stop": "1 Transit",
     "2 stops": "2 Transit"
-    ">2 stops": "2+ Transit"
+    "2+ stops": "2+ Transit"
 }
 
 reverse_input_map = {
