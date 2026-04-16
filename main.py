@@ -7,23 +7,41 @@ MODEL_PATH = "model_tiket.pkl"
 META_PATH = "model_meta.pkl"
 
 # =========================
+# MAPPING (GLOBAL)
+# =========================
+display_map = {
+    "0 stops": "Langsung",
+    "1 stop": "1 Transit",
+    "2 stops": "2 Transit",
+    "3 stops": "3 Transit",
+    "Langsung": "Langsung",
+    "1 Transit": "1 Transit",
+    "2 Transit": "2 Transit",
+    "3 Transit": "3 Transit"
+}
+
+reverse_map = {
+    "Langsung": "0 stops",
+    "1 Transit": "1 stop",
+    "2 Transit": "2 stops",
+    "3 Transit": "3 stops"
+}
+
+
+# =========================
 # LOAD DATA
 # =========================
 @st.cache_data
 def load_data():
     df = pd.read_csv("airlines_flights_data.csv")
 
-    # Hapus kolom tidak perlu
     df = df.drop(columns=[col for col in ["index"] if col in df.columns])
-
-    # Bersihkan data
     df = df.replace(["None", "nan", ""], pd.NA)
 
-    # Paksa string
     for col in df.select_dtypes(include="object").columns:
         df[col] = df[col].astype(str)
 
-    # Mapping waktu (TETAP)
+    # Mapping waktu
     time_map = {
         "Early_Morning": "Dini hari",
         "Morning": "Pagi",
@@ -41,15 +59,6 @@ def load_data():
         df["class"] = df["class"].replace({
             "Economy": "Ekonomi",
             "Business": "Bisnis"
-        })
-
-    # 🔥 Mapping stops ke Indonesia
-    if "stops" in df.columns:
-        df["stops"] = df["stops"].replace({
-            "0 stops": "Langsung",
-            "1 stop": "1 Transit",
-            "2 stops": "2 Transit",
-            "3 stops": "3 Transit"
         })
 
     return df
@@ -83,24 +92,16 @@ label_map = {
 
 
 # =========================
-# AI FLIGHT ENGINE
+# AI ENGINE
 # =========================
 def find_best_flights(df, model, input_data, top_n=5):
 
     flight_options = df[["airline", "flight", "stops"]].drop_duplicates()
 
-    # Limit biar cepat
     if len(flight_options) > 1000:
         flight_options = flight_options.sample(500, random_state=42)
 
     results = []
-
-    reverse_map = {
-        "Langsung": "0 stops",
-        "1 Transit": "1 stop",
-        "2 Transit": "2 stops",
-        "3 Transit": "3 stops"
-    }
 
     for _, row in flight_options.iterrows():
         temp = input_data.copy()
@@ -108,7 +109,7 @@ def find_best_flights(df, model, input_data, top_n=5):
         temp["airline"] = row["airline"]
         temp["flight"] = row["flight"]
 
-        # 🔥 convert balik ke format model
+        # 🔥 convert ke format model
         temp["stops"] = reverse_map.get(row["stops"], row["stops"])
 
         try:
@@ -117,7 +118,7 @@ def find_best_flights(df, model, input_data, top_n=5):
             results.append({
                 "airline": row["airline"],
                 "flight": row["flight"],
-                "stops": row["stops"],  # tampilkan versi Indonesia
+                "stops": row["stops"],  # tetap simpan original
                 "price": pred
             })
         except:
@@ -234,7 +235,11 @@ if st.button("🔍 Cari Penerbangan Terbaik"):
     st.subheader("🏆 Rekomendasi Penerbangan Terbaik")
 
     for i, r in enumerate(results, 1):
+
+        # 🔥 FIX FINAL DISPLAY
+        stops_label = display_map.get(r["stops"], r["stops"])
+
         st.write(
             f"{i}. ✈️ {r['airline']} ({r['flight']}) | "
-            f"{r['stops']} | 💰 Rp {int(r['price']):,}"
+            f"{stops_label} | 💰 Rp {int(r['price']):,}"
         )
