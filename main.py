@@ -57,10 +57,6 @@ def load_data():
     for col in df.select_dtypes(include="object").columns:
         df[col] = df[col].astype(str)
 
-    # Create 4 time bins per hour for duration (max 24 hours)
-    if "duration" in df.columns:
-        df["duration_bin"] = df["duration"].apply(create_duration_bins)
-
     # Mapping waktu Indonesia
     time_map = {
         "Early_Morning": "Dini Hari",
@@ -219,12 +215,16 @@ for i, col in enumerate(feature_cols):
     container = col1 if i % 2 == 0 else col2
 
     if ptypes.is_numeric_dtype(df[col]):
-        input_data[col] = container.slider(
+        value = container.slider(
             col,
             float(df[col].min()),
             float(df[col].max()),
             float(df[col].mean())
         )
+        # Apply 4-time-bins-per-hour to duration
+        if col == "duration":
+            value = create_duration_bins(value)
+        input_data[col] = value
     else:
         input_data[col] = container.selectbox(
             col,
