@@ -7,23 +7,23 @@ MODEL_PATH = "model_tiket.pkl"
 META_PATH = "model_meta.pkl"
 
 # =========================
-# LOAD DATA (SAFE VERSION)
+# LOAD DATA
 # =========================
 @st.cache_data
 def load_data():
     df = pd.read_csv("airlines_flights_data.csv")
 
-    # 🔥 Hapus kolom tidak perlu
+    # Hapus kolom tidak perlu
     df = df.drop(columns=[col for col in ["index", "flight"] if col in df.columns])
 
-    # 🔥 Bersihkan nilai aneh
+    # Bersihkan data
     df = df.replace(["None", "nan", ""], pd.NA)
 
-    # 🔥 Paksa object jadi string
+    # Paksa string
     for col in df.select_dtypes(include="object").columns:
         df[col] = df[col].astype(str)
 
-    # 🔥 Mapping waktu Indonesia (TIDAK DIUBAH)
+    # Mapping waktu (TIDAK DIUBAH)
     time_map = {
         "Early_Morning": "Dini hari",
         "Morning": "Pagi",
@@ -36,7 +36,7 @@ def load_data():
         if col in df.columns:
             df[col] = df[col].replace(time_map)
 
-    # 🔥 Mapping kelas
+    # Mapping kelas
     if "class" in df.columns:
         df["class"] = df["class"].replace({
             "Economy": "Ekonomi",
@@ -47,7 +47,7 @@ def load_data():
 
 
 # =========================
-# LOAD MODEL (FAST)
+# LOAD MODEL
 # =========================
 @st.cache_resource
 def load_model():
@@ -57,12 +57,10 @@ def load_model():
 
 
 # =========================
-# LABEL UI (🔥 TAMBAHAN)
+# LABEL UI
 # =========================
 label_map = {
     "airline": "Maskapai",
-    "source": "Kota Asal",
-    "destination": "Kota Tujuan",
     "departure_time": "Waktu Keberangkatan",
     "arrival_time": "Waktu Kedatangan",
     "stops": "Jumlah Transit",
@@ -98,30 +96,55 @@ def advisor(input_data):
 # UI
 # =========================
 st.set_page_config(page_title="AI Flight Price Advisor", layout="wide")
-st.title("✈️ AI Flight Price Advisor (Final Clean Version)")
+st.title("✈️ AI Flight Price Advisor (Final Version)")
 
 df = load_data()
 model, meta = load_model()
 
 st.success(f"Model: {meta['model']} | MAE: {meta['mae']:.2f}")
 
+input_data = {}
+
+# =========================
+# ✈️ ROUTE SECTION (🔥 FIX UTAMA)
+# =========================
+st.subheader("✈️ Rute Penerbangan")
+
+route_cols = st.columns(2)
+
+if "source" in df.columns:
+    input_data["source"] = route_cols[0].selectbox(
+        "Kota Asal",
+        sorted(df["source"].dropna().unique())
+    )
+
+if "destination" in df.columns:
+    input_data["destination"] = route_cols[1].selectbox(
+        "Kota Tujuan",
+        sorted(df["destination"].dropna().unique())
+    )
+
+# =========================
+# INPUT LAINNYA
+# =========================
 feature_cols = df.drop(columns=["price"]).columns
 
 col1, col2 = st.columns(2)
-input_data = {}
 
 for i, col in enumerate(feature_cols):
+
+    # skip karena sudah dibuat di atas
+    if col in ["source", "destination"]:
+        continue
+
     container = col1 if i % 2 == 0 else col2
     label = label_map.get(col, col)
 
     # =========================
-    # 🔥 DURATION (15 MENIT)
+    # DURATION
     # =========================
     if col.lower() == "duration":
-        val = container.slider(
-            label,
-            0.0, 24.0, 1.0, step=0.25
-        )
+        val = container.slider(label, 0.0, 24.0, 1.0, step=0.25)
 
         hours = int(val)
         minutes = int((val - hours) * 60)
@@ -131,13 +154,10 @@ for i, col in enumerate(feature_cols):
         input_data[col] = val
 
     # =========================
-    # 🔥 DAYS LEFT (0.5 HARI)
+    # DAYS LEFT
     # =========================
     elif col.lower() == "days_left":
-        val = container.slider(
-            label,
-            0.0, 30.0, 10.0, step=0.5
-        )
+        val = container.slider(label, 0.0, 30.0, 10.0, step=0.5)
 
         days = int(val)
         hours = int((val - days) * 24)
@@ -147,7 +167,7 @@ for i, col in enumerate(feature_cols):
         input_data[col] = val
 
     # =========================
-    # 🔥 NUMERIC (SAFE)
+    # NUMERIC (SAFE)
     # =========================
     elif ptypes.is_numeric_dtype(df[col]):
         try:
@@ -170,7 +190,7 @@ for i, col in enumerate(feature_cols):
             )
 
     # =========================
-    # 🔥 CATEGORICAL
+    # CATEGORICAL
     # =========================
     else:
         input_data[col] = container.selectbox(
