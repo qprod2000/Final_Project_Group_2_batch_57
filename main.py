@@ -23,7 +23,7 @@ def load_data():
     for col in df.select_dtypes(include="object").columns:
         df[col] = df[col].astype(str)
 
-    # 🔥 Mapping waktu Indonesia
+    # 🔥 Mapping waktu Indonesia (TIDAK DIUBAH)
     time_map = {
         "Early_Morning": "Dini hari",
         "Morning": "Pagi",
@@ -57,6 +57,22 @@ def load_model():
 
 
 # =========================
+# LABEL UI (🔥 TAMBAHAN)
+# =========================
+label_map = {
+    "airline": "Maskapai",
+    "source": "Kota Asal",
+    "destination": "Kota Tujuan",
+    "departure_time": "Waktu Keberangkatan",
+    "arrival_time": "Waktu Kedatangan",
+    "stops": "Jumlah Transit",
+    "duration": "Durasi Penerbangan",
+    "days_left": "Sisa Hari Pemesanan",
+    "class": "Kelas Penerbangan"
+}
+
+
+# =========================
 # AI ADVISOR
 # =========================
 def advisor(input_data):
@@ -72,7 +88,7 @@ def advisor(input_data):
     else:
         recs.append("✈️ Direct flight lebih cepat tapi mahal")
 
-    if input_data.get("class") == "bisnis":
+    if input_data.get("class") == "Bisnis":
         recs.append("💺 Kelas bisnis meningkatkan harga signifikan")
 
     return recs
@@ -82,7 +98,7 @@ def advisor(input_data):
 # UI
 # =========================
 st.set_page_config(page_title="AI Flight Price Advisor", layout="wide")
-st.title("✈️ AI Flight Price Advisor (Final Stable Version)")
+st.title("✈️ AI Flight Price Advisor (Final Clean Version)")
 
 df = load_data()
 model, meta = load_model()
@@ -96,13 +112,14 @@ input_data = {}
 
 for i, col in enumerate(feature_cols):
     container = col1 if i % 2 == 0 else col2
+    label = label_map.get(col, col)
 
     # =========================
     # 🔥 DURATION (15 MENIT)
     # =========================
     if col.lower() == "duration":
         val = container.slider(
-            "Durasi (jam)",
+            label,
             0.0, 24.0, 1.0, step=0.25
         )
 
@@ -118,7 +135,7 @@ for i, col in enumerate(feature_cols):
     # =========================
     elif col.lower() == "days_left":
         val = container.slider(
-            "Sisa Hari Pemesanan",
+            label,
             0.0, 30.0, 10.0, step=0.5
         )
 
@@ -141,14 +158,14 @@ for i, col in enumerate(feature_cols):
             mean_val = float(num_series.mean())
 
             input_data[col] = container.slider(
-                col,
+                label,
                 min_val,
                 max_val,
                 mean_val
             )
         except:
             input_data[col] = container.selectbox(
-                col,
+                label,
                 sorted(df[col].dropna().astype(str).unique())
             )
 
@@ -157,7 +174,7 @@ for i, col in enumerate(feature_cols):
     # =========================
     else:
         input_data[col] = container.selectbox(
-            col,
+            label,
             sorted(df[col].dropna().astype(str).unique())
         )
 
