@@ -3,7 +3,6 @@ import pandas as pd # type: ignore
 import streamlit as st  # type: ignore
 
 MODEL_PATH = "model_tiket.pkl"
-META_PATH = "model_meta.pkl"
 
 # =========================
 # MAP
@@ -21,8 +20,6 @@ display_map = {
 input_stops_map = {
     "zero": "Langsung",
     "one": "1 Transit",
-    "two": "2 Transit",
-    "more than two": "2+ Transit",
     "two or more": "2+ Transit",
     "0 stops": "Langsung",
     "1 stop": "1 Transit",
@@ -32,7 +29,7 @@ input_stops_map = {
 reverse_input_map = {
     "Langsung": "zero",
     "1 Transit": "one",
-    "2 Transit": "two",
+    "2 Transit": "two or more",
     "2+ Transit": "two or more"
 }
 
@@ -44,9 +41,12 @@ def format_duration(x):
     m = int((x - h) * 60)
     return f"{h} jam {m} menit"
 
+def format_class(c):
+    return "Bisnis" if str(c).lower() == "business" else "Ekonomi"
+
 
 # =========================
-# LOAD DATA
+# LOAD
 # =========================
 @st.cache_data
 def load_data():
@@ -66,7 +66,7 @@ def load_model():
 
 
 # =========================
-# AI ENGINE
+# AI ENGINE (SMART)
 # =========================
 def find_best_flights(df, model, input_data, top_n=5):
 
@@ -74,14 +74,12 @@ def find_best_flights(df, model, input_data, top_n=5):
 
     if user_stops:
         mapped = reverse_input_map.get(user_stops, user_stops)
-        filtered_df = df[df["stops"] == mapped]
-    else:
-        filtered_df = df
+        df = df[df["stops"] == mapped]
 
-    if len(filtered_df) == 0:
-        filtered_df = df.sample(50)
+    if len(df) == 0:
+        df = df.sample(50)
 
-    options = filtered_df[["airline", "flight", "stops", "duration"]].drop_duplicates()
+    options = df[["airline", "flight", "stops", "duration", "class"]].drop_duplicates()
 
     results = []
 
@@ -92,6 +90,7 @@ def find_best_flights(df, model, input_data, top_n=5):
         temp["flight"] = row["flight"]
         temp["duration"] = row["duration"]
         temp["stops"] = row["stops"]
+        temp["class"] = row["class"]
 
         try:
             pred = model.predict(pd.DataFrame([temp]))[0]
@@ -99,33 +98,44 @@ def find_best_flights(df, model, input_data, top_n=5):
             results.append({
                 "airline": row["airline"],
                 "flight": row["flight"],
-                "stops": input_stops_map.get(str(row["stops"]).lower(), row["stops"]),
+                "stops": row["stops"],
                 "duration": row["duration"],
+                "class": row["class"],
                 "price": pred
             })
-
         except:
             continue
 
     if len(results) == 0:
-        return df.sample(5).to_dict("records")
+        return []
 
-    return sorted(results, key=lambda x: x["price"])[:top_n]
+    df_res = pd.DataFrame(results)
+
+    # =========================
+    # SCORING SYSTEM
+    # =========================
+    df_res["price_norm"] = (df_res["price"] - df_res["price"].min()) / (df_res["price"].max() - df_res["price"].min() + 1e-6)
+    df_res["duration_norm"] = (df_res["duration"] - df_res["duration"].min()) / (df_res["duration"].max() - df_res["duration"].min() + 1e-6)
+
+    # 🔥 Best value (bisa di-tune)
+    df_res["score"] = df_res["price_norm"] * 0.7 + df_res["duration_norm"] * 0.3
+
+    df_res = df_res.sort_values("score")
+
+    return df_res.head(top_n), df_res
 
 
 # =========================
 # UI
 # =========================
-st.title("✈️ AI Flight Price Advisor")
+st.title("✈️ AI Flight Optimizer")
 
 df = load_data()
 model = load_model()
 
 input_data = {}
 
-# =========================
-# ROUTE (FIX FINAL)
-# =========================
+# ROUTE
 col1, col2 = st.columns(2)
 
 source_col = next((c for c in ["source", "source_city"] if c in df.columns), None)
@@ -133,43 +143,51 @@ dest_col = next((c for c in ["destination", "destination_city"] if c in df.colum
 
 if source_col:
     input_data[source_col] = col1.selectbox("Kota Asal", sorted(df[source_col].unique()))
-else:
-    st.error("Kolom kota asal tidak ditemukan")
 
 if dest_col:
     input_data[dest_col] = col2.selectbox("Kota Tujuan", sorted(df[dest_col].unique()))
-else:
-    st.error("Kolom kota tujuan tidak ditemukan")
 
-# =========================
 # STOPS
-# =========================
 raw_stops = sorted(df["stops"].unique())
 display_stops = [input_stops_map.get(str(x).lower(), x) for x in raw_stops]
 
 selected = st.selectbox("Jumlah Transit", display_stops)
 input_data["stops"] = selected
 
-# =========================
 # DAYS
-# =========================
 input_data["days_left"] = st.slider("Sisa Hari", 0.0, 30.0, 10.0, step=0.5)
 
 # =========================
-# PREDICT
+# RUN
 # =========================
-if st.button("🔍 Cari Penerbangan Terbaik"):
+if st.button("🚀 Cari Rekomendasi Terbaik"):
 
-    results = find_best_flights(df, model, input_data)
+    top, all_data = find_best_flights(df, model, input_data)
 
-    st.subheader("🏆 Rekomendasi")
+    if len(top) == 0:
+        st.warning("Tidak ada hasil")
+    else:
+        cheapest = all_data.loc[all_data["price"].idxmin()]
+        fastest = all_data.loc[all_data["duration"].idxmin()]
 
-    for i, r in enumerate(results, 1):
+        st.subheader("🏆 Rekomendasi Terbaik")
 
-        stops_label = display_map.get(r["stops"], r["stops"])
+        for i, r in top.iterrows():
 
-        st.write(
-            f"{i}. ✈️ {r['airline']} ({r['flight']}) | "
-            f"{stops_label} | ⏱ {format_duration(r['duration'])} | "
-            f"💰 Rp {int(r['price']):,}"
-        )
+            tag = ""
+
+            if r["flight"] == cheapest["flight"]:
+                tag += " 💰 Termurah"
+            if r["flight"] == fastest["flight"]:
+                tag += " ⚡ Tercepat"
+            if i == top.index[0]:
+                tag += " ⭐ Best Value"
+
+            st.write(
+                f"✈️ {r['airline']} ({r['flight']}) | "
+                f"{display_map.get(r['stops'], r['stops'])} | "
+                f"⏱ {format_duration(r['duration'])} | "
+                f"💺 {format_class(r['class'])} | "
+                f"💰 Rp {int(r['price']):,}"
+                f"{tag}"
+            )
