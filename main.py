@@ -36,17 +36,19 @@ reverse_map = {
 input_stops_map = {
     "zero": "Langsung",
     "one": "1 Transit",
-    "two or more": "2+ Transit",
+    "two": "2 Transit",
+    "more than two": "2+ Transit",
     "0 stops": "Langsung",
     "1 stop": "1 Transit",
     "2 stops": "2 Transit"
+    ">2 stops": "2+ Transit"
 }
 
 reverse_input_map = {
     "Langsung": "zero",
     "1 Transit": "one",
-    "2 Transit": "two or more",
-    "2+ Transit": "two or more"
+    "2 Transit": "two",
+    "2+ Transit": "more than two"
 }
 
 
@@ -69,7 +71,8 @@ def load_data():
         "Morning": "Pagi",
         "Afternoon": "Siang",
         "Evening": "Sore",
-        "Night": "Malam"
+        "Night": "Malam",
+        "Late_Night": "Larut malam"
     }
 
     for col in ["departure_time", "arrival_time"]:
