@@ -53,15 +53,25 @@ def load_model():
 # =========================
 # AI ADVISOR
 # =========================
+
+def _safe_number(value):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def advisor(input_data):
     recs = []
+    days_left = _safe_number(input_data.get("days_left", 0))
+    stops = _safe_number(input_data.get("stops", 0))
 
-    if input_data.get("days_left", 0) < 5:
+    if days_left < 5:
         recs.append("⚠️ Harga tinggi karena booking terlalu dekat")
-    elif input_data.get("days_left", 0) > 20:
+    elif days_left > 20:
         recs.append("💰 Lebih murah karena booking jauh hari")
 
-    if input_data.get("stops", 0) > 0:
+    if stops > 0:
         recs.append("🔄 Transit bisa lebih murah tapi lebih lama")
     else:
         recs.append("✈️ Direct flight lebih cepat tapi mahal")
