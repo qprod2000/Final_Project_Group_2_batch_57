@@ -7,7 +7,7 @@ MODEL_PATH = "model_tiket.pkl"
 META_PATH = "model_meta.pkl"
 
 # =========================
-# GLOBAL MAP (FINAL)
+# GLOBAL MAP
 # =========================
 display_map = {
     "0 stops": "Langsung",
@@ -21,7 +21,7 @@ display_map = {
     "1 Transit": "1 Transit",
     "2 Transit": "2 Transit",
     "3 Transit": "3 Transit",
-    "2+ Transit": "2+ Transit",
+    "2+ Transit": "2+ Transit"
 }
 
 reverse_map = {
@@ -29,27 +29,35 @@ reverse_map = {
     "1 Transit": "1 stop",
     "2 Transit": "2 stops",
     "3 Transit": "3 stops",
-    "2+ Transit": "2 stops",
+    "2+ Transit": "2 stops"
 }
 
-# 🔥 INPUT MAP (INI YANG FIX MASALAH KAMU)
 input_stops_map = {
     "zero": "Langsung",
     "one": "1 Transit",
     "two": "2 Transit",
     "more than two": "2+ Transit",
+    "two or more": "2+ Transit",
     "0 stops": "Langsung",
     "1 stop": "1 Transit",
     "2 stops": "2 Transit",
-    "2+ stops": "2+ Transit",
+    "2+ stops": "2+ Transit"
 }
 
 reverse_input_map = {
     "Langsung": "zero",
     "1 Transit": "one",
     "2 Transit": "two",
-    "2+ Transit": "more than two",
+    "2+ Transit": "two or more"
 }
+
+# =========================
+# HELPER
+# =========================
+def format_duration(hours_float):
+    h = int(hours_float)
+    m = int((hours_float - h) * 60)
+    return f"{h} jam {m} menit"
 
 
 # =========================
@@ -65,21 +73,18 @@ def load_data():
     for col in df.select_dtypes(include="object").columns:
         df[col] = df[col].astype(str)
 
-    # Mapping waktu
     time_map = {
         "Early_Morning": "Dini hari",
         "Morning": "Pagi",
         "Afternoon": "Siang",
         "Evening": "Sore",
-        "Night": "Malam",
-        "Late_Night": "Larut malam",
+        "Night": "Malam"
     }
 
     for col in ["departure_time", "arrival_time"]:
         if col in df.columns:
             df[col] = df[col].replace(time_map)
 
-    # Mapping kelas
     if "class" in df.columns:
         df["class"] = df["class"].replace({
             "Economy": "Ekonomi",
@@ -110,7 +115,6 @@ label_map = {
     "departure_time": "Waktu Keberangkatan",
     "arrival_time": "Waktu Kedatangan",
     "stops": "Jumlah Transit",
-    "duration": "Durasi Perjalanan (jam)",
     "days_left": "Sisa Hari Pemesanan",
     "class": "Kelas Penerbangan"
 }
@@ -121,7 +125,8 @@ label_map = {
 # =========================
 def find_best_flights(df, model, input_data, top_n=5):
 
-    flight_options = df[["airline", "flight", "stops"]].drop_duplicates()
+    # 🔥 include duration
+    flight_options = df[["airline", "flight", "stops", "duration"]].drop_duplicates()
 
     if len(flight_options) > 1000:
         flight_options = flight_options.sample(500, random_state=42)
@@ -134,11 +139,13 @@ def find_best_flights(df, model, input_data, top_n=5):
         temp["airline"] = row["airline"]
         temp["flight"] = row["flight"]
 
-        # 🔥 normalize stops
         raw = str(row["stops"]).lower().strip()
         normalized = input_stops_map.get(raw, row["stops"])
 
         temp["stops"] = reverse_map.get(normalized, normalized)
+
+        # 🔥 duration tetap masuk ke model
+        temp["duration"] = row["duration"]
 
         try:
             pred = model.predict(pd.DataFrame([temp]))[0]
@@ -147,6 +154,7 @@ def find_best_flights(df, model, input_data, top_n=5):
                 "airline": row["airline"],
                 "flight": row["flight"],
                 "stops": normalized,
+                "duration": row["duration"],
                 "price": pred
             })
         except:
@@ -200,33 +208,12 @@ col1, col2 = st.columns(2)
 
 for i, col in enumerate(feature_cols):
 
-    if col in ["airline", "flight", "source", "destination", "source_city", "destination_city"]:
+    if col in ["airline", "flight", "duration", "source", "destination", "source_city", "destination_city"]:
         continue
 
     container = col1 if i % 2 == 0 else col2
     label = label_map.get(col, col)
 
-    # DURATION
-    if col.lower() == "duration":
-        val = container.slider(label, 0.0, 24.0, 1.0, step=0.25)
-
-        h = int(val)
-        m = int((val - h) * 60)
-
-        container.caption(f"{h} jam {m} menit")
-        input_data[col] = val
-
-    # DAYS LEFT
-    elif col.lower() == "days_left":
-        val = container.slider(label, 0.0, 30.0, 10.0, step=0.5)
-
-        d = int(val)
-        h = int((val - d) * 24)
-
-        container.caption(f"{d} hari {h} jam")
-        input_data[col] = val
-
-    # 🔥 STOPS (FIX FINAL)
     elif col.lower() == "stops":
         raw_options = sorted(df[col].dropna().astype(str).unique())
 
@@ -236,10 +223,17 @@ for i, col in enumerate(feature_cols):
         ]
 
         selected = container.selectbox(label, display_options)
-
         input_data[col] = reverse_input_map.get(selected, selected)
 
-    # NUMERIC
+    elif col.lower() == "days_left":
+        val = container.slider(label, 0.0, 30.0, 10.0, step=0.5)
+
+        d = int(val)
+        h = int((val - d) * 24)
+
+        container.caption(f"{d} hari {h} jam")
+        input_data[col] = val
+
     elif ptypes.is_numeric_dtype(df[col]):
         try:
             num = pd.to_numeric(df[col], errors="coerce")
@@ -256,7 +250,6 @@ for i, col in enumerate(feature_cols):
                 sorted(df[col].dropna().astype(str).unique())
             )
 
-    # CATEGORICAL
     else:
         input_data[col] = container.selectbox(
             label,
@@ -276,8 +269,9 @@ if st.button("🔍 Cari Penerbangan Terbaik"):
     for i, r in enumerate(results, 1):
 
         stops_label = display_map.get(r["stops"], r["stops"])
+        duration_label = format_duration(r["duration"])
 
         st.write(
             f"{i}. ✈️ {r['airline']} ({r['flight']}) | "
-            f"{stops_label} | 💰 Rp {int(r['price']):,}"
+            f"{stops_label} | ⏱ {duration_label} | 💰 Rp {int(r['price']):,}"
         )
