@@ -141,10 +141,10 @@ for i, col in enumerate(feature_cols):
 # =========================
 # elif ptypes.is_numeric_dtype(df[col]):
     input_data[col] = container.slider(
-            col,
-            float(df[col].min()),
-            float(df[col].max()),
-            float(df[col].mean())
+        col,
+        float(df[col].min()),
+        float(df[col].max()),
+        float(df[col].mean())
         )
 
 # =========================
