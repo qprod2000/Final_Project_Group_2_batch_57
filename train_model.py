@@ -1,15 +1,15 @@
-import pandas as pd
-import joblib
+import pandas as pd  # type: ignore
+import joblib   # type: ignore
 
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import mean_absolute_error
-from sklearn.preprocessing import OneHotEncoder
-from sklearn.compose import ColumnTransformer
-from sklearn.pipeline import Pipeline
-from sklearn.ensemble import RandomForestRegressor
+from sklearn.model_selection import train_test_split    # type: ignore
+from sklearn.metrics import mean_absolute_error # type: ignore
+from sklearn.preprocessing import OneHotEncoder # type: ignore
+from sklearn.compose import ColumnTransformer # type: ignore
+from sklearn.pipeline import Pipeline # type: ignore
+from sklearn.ensemble import RandomForestRegressor  # type: ignore
 
 try:
-    from xgboost import XGBRegressor
+    from xgboost import XGBRegressor    # type: ignore
     XGB_AVAILABLE = True
 except:
     XGB_AVAILABLE = False
