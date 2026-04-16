@@ -86,9 +86,9 @@ def recommend_airline(input_data, df):
     return df.groupby("airline")["price"].mean().sort_values().index[0]
 
 
-def recommend_flight(input_data, df):
-    if "flight" not in df.columns:
-        return None
+def recommend_flights(input_data, df, top_n=2):
+    if "flight" not in df.columns or "airline" not in df.columns:
+        return []
 
     route_cols = ["source_city", "destination_city", "class", "stops", "departure_time"]
     fallback_sets = [
@@ -106,22 +106,28 @@ def recommend_flight(input_data, df):
             mask &= df[col] == input_data.get(col)
         subset = df[mask]
         if not subset.empty:
-            return subset.groupby("flight")["price"].mean().sort_values().index[0]
+            grouped = subset.groupby(["airline", "flight"])["price"].mean()
+            best_pairs = grouped.sort_values().head(top_n).reset_index()
+            return best_pairs.to_dict(orient="records")
 
-    return df.groupby("flight")["price"].mean().sort_values().index[0]
+    grouped = df.groupby(["airline", "flight"])["price"].mean()
+    best_pairs = grouped.sort_values().head(top_n).reset_index()
+    return best_pairs.to_dict(orient="records")
 
 
 def advisor(input_data, df):
     recs = []
     days_left = _safe_number(input_data.get("days_left", 0))
-    stops = _safe_number(input_data.get("stops", 0))
 
     if days_left < 5:
         recs.append("⚠️ Harga tinggi karena booking terlalu dekat")
     elif days_left > 20:
         recs.append("💰 Lebih murah karena booking jauh hari")
 
-    if stops > 0:
+    stops = input_data.get("stops")
+    if stops == "two_or_more":
+        recs.append("🔄 Rute dengan 2+ stop biasanya menawarkan beberapa pilihan airline dan nomor penerbangan")
+    elif _safe_number(stops) > 0:
         recs.append("🔄 Transit bisa lebih murah tapi lebih lama")
     else:
         recs.append("✈️ Direct flight lebih cepat tapi mahal")
@@ -133,9 +139,15 @@ def advisor(input_data, df):
     if best_airline:
         recs.append(f"✈️ Rekomendasi maskapai: {best_airline}")
 
-    best_flight = recommend_flight(input_data, df)
-    if best_flight:
-        recs.append(f"🛫 Rekomendasi nomor penerbangan: {best_flight}")
+    best_pairs = recommend_flights(input_data, df, top_n=3 if stops == "two_or_more" else 1)
+    if best_pairs:
+        if stops == "two_or_more" and len(best_pairs) > 1:
+            recs.append("🛫 Rekomendasi penerbangan terbaik untuk 2+ stop:")
+            for pair in best_pairs:
+                recs.append(f"   - {pair['airline']} / {pair['flight']}")
+        else:
+            pair = best_pairs[0]
+            recs.append(f"🛫 Rekomendasi nomor penerbangan: {pair['flight']} ({pair['airline']})")
 
     return recs
 
@@ -181,7 +193,9 @@ for i, col in enumerate(feature_cols):
 if st.button("🔍 Prediksi & Rekomendasi"):
     input_data.setdefault("index", 0)
     input_data["airline"] = recommend_airline(input_data, df)
-    input_data["flight"] = recommend_flight(input_data, df)
+    flight_options = recommend_flights(input_data, df, top_n=3 if input_data.get("stops") == "two_or_more" else 1)
+    if flight_options:
+        input_data["flight"] = flight_options[0]["flight"]
     input_df = pd.DataFrame([input_data])
     pred = model.predict(input_df)[0]
 
