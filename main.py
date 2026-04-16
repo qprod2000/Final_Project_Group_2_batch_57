@@ -11,22 +11,39 @@ META_PATH = "model_meta.pkl"
 # =========================
 def create_duration_bins(duration_hours):
     """
-    Convert duration in hours to 4 time bins per hour.
+    Convert duration in hours to 4 time bins per hour format (.00, .15, .30, .45).
     Each hour is divided into 4 bins: 0-15min, 15-30min, 30-45min, 45-60min
-    Maximum 24 hours (96 bins total)
+    Example: 1.5 hours → 1.30 (1 hour 30 minutes)
+    Maximum 24 hours
     """
     if pd.isna(duration_hours) or duration_hours <= 0:
-        return "Bin_0"
+        return 0.00
     
     # Cap at 24 hours
     duration_hours = min(float(duration_hours), 24)
     
-    # Convert to minutes and calculate bin
+    # Convert to total minutes
     total_minutes = duration_hours * 60
-    bin_number = int(total_minutes // 15)  # Each bin is 15 minutes
-    bin_number = min(bin_number, 95)  # Max 96 bins (24 hours * 4)
     
-    return f"Bin_{bin_number}"
+    # Extract hours
+    hours = int(total_minutes // 60)
+    minutes = total_minutes % 60
+    
+    # Round minutes to nearest bin (0, 15, 30, 45)
+    if minutes < 7.5:
+        bin_minutes = 0
+    elif minutes < 22.5:
+        bin_minutes = 15
+    elif minutes < 37.5:
+        bin_minutes = 30
+    elif minutes < 52.5:
+        bin_minutes = 45
+    else:
+        hours += 1
+        bin_minutes = 0
+    
+    # Format as hour.minutes
+    return float(f"{hours}.{bin_minutes:02d}")
 
 
 # =========================
