@@ -54,7 +54,6 @@ def load_model():
     meta = joblib.load(META_PATH)
     return model, meta
 
-
 # =========================
 # AI ADVISOR
 # =========================
