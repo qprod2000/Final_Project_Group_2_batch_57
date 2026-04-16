@@ -1,0 +1,62 @@
+import pandas as pd
+import joblib
+
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_absolute_error
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+from sklearn.ensemble import RandomForestRegressor
+
+try:
+    from xgboost import XGBRegressor
+    XGB_AVAILABLE = True
+except:
+    XGB_AVAILABLE = False
+
+df = pd.read_csv("airlines_flights_data.csv")
+
+target = "price" if "price" in df.columns else df.columns[-1]
+
+X = df.drop(columns=[target])
+y = df[target]
+
+cat_cols = X.select_dtypes(include=["object"]).columns
+num_cols = X.select_dtypes(exclude=["object"]).columns
+
+preprocessor = ColumnTransformer([
+    ("cat", OneHotEncoder(handle_unknown="ignore"), cat_cols),
+    ("num", "passthrough", num_cols)
+])
+
+def build(model_type):
+    if model_type == "xgb" and XGB_AVAILABLE:
+        model = XGBRegressor(n_estimators=200, max_depth=6)
+    else:
+        model = RandomForestRegressor(n_estimators=120)
+
+    return Pipeline([
+        ("preprocessor", preprocessor),
+        ("model", model)
+    ])
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
+
+models = {}
+
+rf = build("rf")
+rf.fit(X_train, y_train)
+models["RandomForest"] = (rf, mean_absolute_error(y_test, rf.predict(X_test)))
+
+if XGB_AVAILABLE:
+    xgb = build("xgb")
+    xgb.fit(X_train, y_train)
+    models["XGBoost"] = (xgb, mean_absolute_error(y_test, xgb.predict(X_test)))
+
+best = min(models, key=lambda k: models[k][1])
+model, mae = models[best]
+
+joblib.dump(model, "model_tiket.pkl")
+joblib.dump({"model": best, "mae": mae}, "model_meta.pkl")
+
+print(f"Best Model: {best} | MAE: {mae}")
