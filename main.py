@@ -23,7 +23,7 @@ def load_data():
     for col in df.select_dtypes(include="object").columns:
         df[col] = df[col].astype(str)
 
-    # Mapping waktu (TIDAK DIUBAH)
+    # Mapping waktu (TETAP PUNYA KAMU)
     time_map = {
         "Early_Morning": "Dini hari",
         "Morning": "Pagi",
@@ -64,7 +64,7 @@ label_map = {
     "departure_time": "Waktu Keberangkatan",
     "arrival_time": "Waktu Kedatangan",
     "stops": "Jumlah Transit",
-    "duration": "Durasi Perjalanan",
+    "duration": "Durasi Penerbangan",
     "days_left": "Sisa Hari Pemesanan",
     "class": "Kelas Penerbangan"
 }
@@ -106,22 +106,36 @@ st.success(f"Model: {meta['model']} | MAE: {meta['mae']:.2f}")
 input_data = {}
 
 # =========================
-# ✈️ ROUTE SECTION (🔥 FIX UTAMA)
+# ✈️ ROUTE SECTION (FINAL FIX)
 # =========================
 st.subheader("✈️ Rute Penerbangan")
 
 route_cols = st.columns(2)
 
-if "source" in df.columns:
-    input_data["source"] = route_cols[0].selectbox(
+# Deteksi kolom asal
+source_col = None
+for col in ["source", "source_city", "from", "origin"]:
+    if col in df.columns:
+        source_col = col
+        break
+
+# Deteksi kolom tujuan
+dest_col = None
+for col in ["destination", "destination_city", "to", "dest"]:
+    if col in df.columns:
+        dest_col = col
+        break
+
+if source_col:
+    input_data[source_col] = route_cols[0].selectbox(
         "Kota Asal",
-        sorted(df["source"].dropna().unique())
+        sorted(df[source_col].dropna().unique())
     )
 
-if "destination" in df.columns:
-    input_data["destination"] = route_cols[1].selectbox(
+if dest_col:
+    input_data[dest_col] = route_cols[1].selectbox(
         "Kota Tujuan",
-        sorted(df["destination"].dropna().unique())
+        sorted(df[dest_col].dropna().unique())
     )
 
 # =========================
@@ -133,8 +147,8 @@ col1, col2 = st.columns(2)
 
 for i, col in enumerate(feature_cols):
 
-    # skip karena sudah dibuat di atas
-    if col in ["source", "destination"]:
+    # skip route biar tidak double
+    if col in ["source", "destination", "source_city", "destination_city"]:
         continue
 
     container = col1 if i % 2 == 0 else col2
@@ -167,7 +181,7 @@ for i, col in enumerate(feature_cols):
         input_data[col] = val
 
     # =========================
-    # NUMERIC (SAFE)
+    # NUMERIC SAFE
     # =========================
     elif ptypes.is_numeric_dtype(df[col]):
         try:
