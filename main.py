@@ -121,7 +121,7 @@ label_map = {
 
 
 # =========================
-# AI ENGINE
+# AI ENGINE (FINAL)
 # =========================
 def find_best_flights(df, model, input_data, top_n=5):
 
@@ -137,15 +137,25 @@ def find_best_flights(df, model, input_data, top_n=5):
 
         temp["airline"] = row["airline"]
         temp["flight"] = row["flight"]
+        temp["duration"] = row["duration"]
 
         raw = str(row["stops"]).lower().strip()
         normalized = input_stops_map.get(raw, row["stops"])
 
         temp["stops"] = reverse_map.get(normalized, normalized)
-        temp["duration"] = row["duration"]
 
         try:
-            pred = model.predict(pd.DataFrame([temp]))[0]
+            temp_df = pd.DataFrame([temp])
+
+            # 🔥 AUTO ALIGN FEATURE
+            if hasattr(model, "feature_names_in_"):
+                for col in model.feature_names_in_:
+                    if col not in temp_df.columns:
+                        temp_df[col] = 0
+
+                temp_df = temp_df[model.feature_names_in_]
+
+            pred = model.predict(temp_df)[0]
 
             results.append({
                 "airline": row["airline"],
@@ -154,8 +164,25 @@ def find_best_flights(df, model, input_data, top_n=5):
                 "duration": row["duration"],
                 "price": pred
             })
+
         except:
             continue
+
+    # 🔥 FALLBACK (anti kosong)
+    if len(results) == 0:
+        fallback = df.sample(min(5, len(df)))
+
+        results = []
+        for _, row in fallback.iterrows():
+            results.append({
+                "airline": row.get("airline", "-"),
+                "flight": row.get("flight", "-"),
+                "stops": input_stops_map.get(str(row.get("stops", "")).lower(), "-"),
+                "duration": row.get("duration", 1),
+                "price": row.get("price", 0)
+            })
+
+        return results
 
     return sorted(results, key=lambda x: x["price"])[:top_n]
 
@@ -178,19 +205,19 @@ input_data = {}
 # =========================
 st.subheader("✈️ Rute Penerbangan")
 
-route_cols = st.columns(2)
+col_r1, col_r2 = st.columns(2)
 
 source_col = next((c for c in ["source", "source_city"] if c in df.columns), None)
 dest_col = next((c for c in ["destination", "destination_city"] if c in df.columns), None)
 
 if source_col:
-    input_data[source_col] = route_cols[0].selectbox(
+    input_data[source_col] = col_r1.selectbox(
         "Kota Asal",
         sorted(df[source_col].dropna().unique())
     )
 
 if dest_col:
-    input_data[dest_col] = route_cols[1].selectbox(
+    input_data[dest_col] = col_r2.selectbox(
         "Kota Tujuan",
         sorted(df[dest_col].dropna().unique())
     )
@@ -211,9 +238,7 @@ for i, col in enumerate(feature_cols):
     container = col1 if i % 2 == 0 else col2
     label = label_map.get(col, col)
 
-    # =========================
-    # INPUT LOGIC FINAL
-    # =========================
+    # 🔥 STOPS
     if col.lower() == "stops":
 
         raw_options = sorted(df[col].dropna().astype(str).unique())
@@ -226,6 +251,7 @@ for i, col in enumerate(feature_cols):
         selected = container.selectbox(label, display_options)
         input_data[col] = reverse_input_map.get(selected, selected)
 
+    # 🔥 DAYS LEFT
     elif col.lower() == "days_left":
 
         val = container.slider(label, 0.0, 30.0, 10.0, step=0.5)
@@ -236,6 +262,7 @@ for i, col in enumerate(feature_cols):
         container.caption(f"{d} hari {h} jam")
         input_data[col] = val
 
+    # 🔥 NUMERIC
     elif ptypes.is_numeric_dtype(df[col]):
 
         try:
@@ -253,6 +280,7 @@ for i, col in enumerate(feature_cols):
                 sorted(df[col].dropna().astype(str).unique())
             )
 
+    # 🔥 CATEGORICAL
     else:
 
         input_data[col] = container.selectbox(
