@@ -86,6 +86,31 @@ def recommend_airline(input_data, df):
     return df.groupby("airline")["price"].mean().sort_values().index[0]
 
 
+def recommend_flight(input_data, df):
+    if "flight" not in df.columns:
+        return None
+
+    route_cols = ["source_city", "destination_city", "class", "stops", "departure_time"]
+    fallback_sets = [
+        route_cols,
+        ["source_city", "destination_city", "class", "stops"],
+        ["source_city", "destination_city", "class"],
+        ["source_city", "destination_city"],
+    ]
+
+    for cols in fallback_sets:
+        if not all(col in df.columns for col in cols):
+            continue
+        mask = pd.Series(True, index=df.index)
+        for col in cols:
+            mask &= df[col] == input_data.get(col)
+        subset = df[mask]
+        if not subset.empty:
+            return subset.groupby("flight")["price"].mean().sort_values().index[0]
+
+    return df.groupby("flight")["price"].mean().sort_values().index[0]
+
+
 def advisor(input_data, df):
     recs = []
     days_left = _safe_number(input_data.get("days_left", 0))
