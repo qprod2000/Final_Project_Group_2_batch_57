@@ -1,7 +1,7 @@
-import joblib
-import pandas as pd
-import streamlit as st
-import pandas.api.types as ptypes
+import joblib   # type: ignore
+import pandas as pd # type: ignore
+import streamlit as st  # type: ignore
+import pandas.api.types as ptypes   # type: ignore
 
 MODEL_PATH = "model_tiket.pkl"
 META_PATH = "model_meta.pkl"
@@ -13,32 +13,38 @@ META_PATH = "model_meta.pkl"
 def load_data():
     df = pd.read_csv("airlines_flights_data.csv")
 
-    # Pastikan semua kategori string (fix error)
-    for col in df.select_dtypes(include="object").columns:
-        df[col] = df[col].astype(str)
 
-    # Mapping waktu Indonesia
-    time_map = {
-        "Early_Morning": "dini hari",
-        "Morning": "pagi",
-        "Afternoon": "siang",
-        "Evening": "malam",
-        "Night": "tengah malam"
+# Hapus kolom yang tidak dipakai
+drop_cols = ["index", "flight"]
+
+for col in drop_cols:
+    if col in df.columns:
+        df = df.drop(columns=[col])
+
+# Pastikan semua kategori string (fix error)
+for col in df.select_dtypes(include="object").columns:
+     df[col] = df[col].astype(str)
+
+# Mapping waktu Indonesia
+time_map = {
+    "Early_Morning": "Dini Hari",
+    "Morning": "Pagi",
+    "Afternoon": "Siang",
+    "Evening": "Sore",
+    "Night": "Malam"
     }
 
-    for col in ["departure_time", "arrival_time"]:
+for col in ["departure_time", "arrival_time"]:
         if col in df.columns:
             df[col] = df[col].replace(time_map)
 
-    # Mapping kelas
-    if "class" in df.columns:
+# Mapping kelas
+if "class" in df.columns:
         df["class"] = df["class"].replace({
             "Economy": "ekonomi",
             "Business": "bisnis"
         })
-
-    return df
-
+        return df
 
 # =========================
 # LOAD MODEL (FAST)
