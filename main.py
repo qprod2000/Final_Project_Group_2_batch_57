@@ -66,83 +66,73 @@ def load_model():
 
 
 # =========================
-# AI ENGINE (FINAL)
+# AI ENGINE (FAST VERSION)
 # =========================
 def find_best_flights(df, model, input_data, top_n=5):
 
+    df_work = df.copy()
+
+    # =========================
+    # FILTER TRANSIT (SMART)
+    # =========================
     user_stops = input_data.get("stops")
 
     if user_stops:
         mapped = reverse_input_map.get(user_stops, user_stops)
-        df = df[df["stops"] == mapped]
+        filtered = df_work[df_work["stops"] == mapped]
 
-    if len(df) == 0:
-        df = df.sample(min(50, len(df)))
-
-    options = df[["airline", "flight", "stops", "duration", "class"]].drop_duplicates()
-
-    results = []
-
-    for _, row in options.iterrows():
-        temp = input_data.copy()
-
-        temp["airline"] = row["airline"]
-        temp["flight"] = row["flight"]
-        temp["duration"] = row["duration"]
-        temp["stops"] = row["stops"]
-        temp["class"] = row["class"]
-
-        try:
-            temp_df = pd.DataFrame([temp])
-
-            # 🔥 FIX MODEL FEATURE MISMATCH
-            if hasattr(model, "feature_names_in_"):
-                for col in model.feature_names_in_:
-                    if col not in temp_df.columns:
-                        temp_df[col] = 0
-                temp_df = temp_df[model.feature_names_in_]
-
-            pred = model.predict(temp_df)[0]
-
-            results.append({
-                "airline": row["airline"],
-                "flight": row["flight"],
-                "stops": row["stops"],
-                "duration": row["duration"],
-                "class": row["class"],
-                "price": pred
-            })
-
-        except:
-            continue
+        if len(filtered) > 10:
+            df_work = filtered
 
     # =========================
-    # 🔥 FIX RETURN (ANTI ERROR LINE 165)
+    # SAMPLING (CEPAT)
     # =========================
-    if len(results) == 0:
-        empty = pd.DataFrame(columns=["airline","flight","stops","duration","class","price"])
-        return empty, empty
-
-    df_res = pd.DataFrame(results)
+    df_work = df_work.sample(min(150, len(df_work)), random_state=42)
 
     # =========================
-    # SCORING
+    # PREPARE INPUT SEKALI
     # =========================
-    df_res["price_norm"] = (df_res["price"] - df_res["price"].min()) / (df_res["price"].max() - df_res["price"].min() + 1e-6)
-    df_res["duration_norm"] = (df_res["duration"] - df_res["duration"].min()) / (df_res["duration"].max() - df_res["duration"].min() + 1e-6)
+    df_pred = df_work.copy()
 
-    df_res["score"] = df_res["price_norm"] * 0.7 + df_res["duration_norm"] * 0.3
+    for k, v in input_data.items():
+        df_pred[k] = v
 
-    df_res = df_res.sort_values("score")
+    # align feature ke model
+    if hasattr(model, "feature_names_in_"):
+        for col in model.feature_names_in_:
+            if col not in df_pred.columns:
+                df_pred[col] = 0
 
-    return df_res.head(top_n), df_res
+        df_pred = df_pred[model.feature_names_in_]
+
+    # =========================
+    # 🔥 PREDICT SEKALI
+    # =========================
+    try:
+        preds = model.predict(df_pred)
+    except:
+        return pd.DataFrame(), pd.DataFrame()
+
+    df_work["price"] = preds
+
+    # =========================
+    # SCORING AI
+    # =========================
+    df_work["price_norm"] = (df_work["price"] - df_work["price"].min()) / (df_work["price"].max() - df_work["price"].min() + 1e-6)
+    df_work["duration_norm"] = (df_work["duration"] - df_work["duration"].min()) / (df_work["duration"].max() - df_work["duration"].min() + 1e-6)
+
+    df_work["score"] = df_work["price_norm"] * 0.7 + df_work["duration_norm"] * 0.3
+
+    df_work = df_work.sort_values("score")
+
+    return df_work.head(top_n), df_work
 
 
 # =========================
 # UI
 # =========================
 st.set_page_config(page_title="AI Flight Optimizer", layout="wide")
-st.title("✈️ AI Flight Optimizer")
+st.title("✈️ AI Flight Optimizer (Fast Version)")
 
 df = load_data()
 model = load_model()
@@ -189,14 +179,14 @@ if st.button("🚀 Cari Rekomendasi Terbaik"):
     top, all_data = find_best_flights(df, model, input_data)
 
     if top.empty:
-        st.warning("Tidak ada hasil ditemukan")
+        st.warning("Tidak ada hasil ditemukan, coba ubah parameter")
     else:
         cheapest = all_data.loc[all_data["price"].idxmin()]
         fastest = all_data.loc[all_data["duration"].idxmin()]
 
         st.subheader("🏆 Rekomendasi Terbaik")
 
-        for idx, r in top.iterrows():
+        for i, r in top.iterrows():
 
             tag = ""
 
@@ -204,7 +194,7 @@ if st.button("🚀 Cari Rekomendasi Terbaik"):
                 tag += " 💰 Termurah"
             if r["flight"] == fastest["flight"]:
                 tag += " ⚡ Tercepat"
-            if idx == top.index[0]:
+            if i == top.index[0]:
                 tag += " ⭐ Best Value"
 
             st.write(
