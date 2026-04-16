@@ -117,20 +117,40 @@ for i, col in enumerate(feature_cols):
         input_data[col] = val
 
     # =========================
-    # NUMERIC
+    # 🔥 SPECIAL: DAYS LEFT (STEP 0.5 HARI)
     # =========================
-    elif ptypes.is_numeric_dtype(df[col]):
-        input_data[col] = container.slider(
+    elif col.lower() == "days_left":
+        val = container.slider(
+        "Sisa Hari Pemesanan",
+        min_value=0.0,
+        max_value=30.0,
+        value=10.0,
+        step=0.5
+    )
+
+    # tampilkan format hari + jam
+    days = int(val)
+    hours = int((val - days) * 24)
+
+    container.caption(f"📅 {days} hari {hours} jam sebelum keberangkatan")
+
+    input_data[col] = val
+
+# =========================
+# NUMERIC
+# =========================
+# elif ptypes.is_numeric_dtype(df[col]):
+    input_data[col] = container.slider(
             col,
             float(df[col].min()),
             float(df[col].max()),
             float(df[col].mean())
         )
 
-    # =========================
-    # CATEGORICAL
-    # =========================
-    else:
+# =========================
+# CATEGORICAL
+# =========================
+else:
         input_data[col] = container.selectbox(
             col,
             sorted(df[col].dropna().astype(str).unique())
