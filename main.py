@@ -145,7 +145,7 @@ for i, col in enumerate(feature_cols):
         float(df[col].min()),
         float(df[col].max()),
         float(df[col].mean())
-        )
+    )
 
 # =========================
 # CATEGORICAL
