@@ -125,7 +125,6 @@ label_map = {
 # =========================
 def find_best_flights(df, model, input_data, top_n=5):
 
-    # 🔥 include duration
     flight_options = df[["airline", "flight", "stops", "duration"]].drop_duplicates()
 
     if len(flight_options) > 1000:
@@ -143,8 +142,6 @@ def find_best_flights(df, model, input_data, top_n=5):
         normalized = input_stops_map.get(raw, row["stops"])
 
         temp["stops"] = reverse_map.get(normalized, normalized)
-
-        # 🔥 duration tetap masuk ke model
         temp["duration"] = row["duration"]
 
         try:
@@ -214,7 +211,11 @@ for i, col in enumerate(feature_cols):
     container = col1 if i % 2 == 0 else col2
     label = label_map.get(col, col)
 
-    elif col.lower() == "stops":
+    # =========================
+    # INPUT LOGIC FINAL
+    # =========================
+    if col.lower() == "stops":
+
         raw_options = sorted(df[col].dropna().astype(str).unique())
 
         display_options = [
@@ -226,6 +227,7 @@ for i, col in enumerate(feature_cols):
         input_data[col] = reverse_input_map.get(selected, selected)
 
     elif col.lower() == "days_left":
+
         val = container.slider(label, 0.0, 30.0, 10.0, step=0.5)
 
         d = int(val)
@@ -235,6 +237,7 @@ for i, col in enumerate(feature_cols):
         input_data[col] = val
 
     elif ptypes.is_numeric_dtype(df[col]):
+
         try:
             num = pd.to_numeric(df[col], errors="coerce")
 
@@ -251,6 +254,7 @@ for i, col in enumerate(feature_cols):
             )
 
     else:
+
         input_data[col] = container.selectbox(
             label,
             sorted(df[col].dropna().astype(str).unique())
