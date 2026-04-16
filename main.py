@@ -44,7 +44,7 @@ if "class" in df.columns:
             "Economy": "ekonomi",
             "Business": "bisnis"
         })
-        return df
+return df
 
 # =========================
 # LOAD MODEL (FAST)
