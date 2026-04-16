@@ -133,6 +133,10 @@ def advisor(input_data, df):
     if best_airline:
         recs.append(f"✈️ Rekomendasi maskapai: {best_airline}")
 
+    best_flight = recommend_flight(input_data, df)
+    if best_flight:
+        recs.append(f"🛫 Rekomendasi nomor penerbangan: {best_flight}")
+
     return recs
 
 
@@ -176,8 +180,8 @@ for i, col in enumerate(feature_cols):
 # =========================
 if st.button("🔍 Prediksi & Rekomendasi"):
     input_data.setdefault("index", 0)
-    input_data.setdefault("flight", df["flight"].dropna().astype(str).mode().iloc[0])
     input_data["airline"] = recommend_airline(input_data, df)
+    input_data["flight"] = recommend_flight(input_data, df)
     input_df = pd.DataFrame([input_data])
     pred = model.predict(input_df)[0]
 
