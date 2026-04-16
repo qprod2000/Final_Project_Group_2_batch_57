@@ -19,11 +19,11 @@ def load_data():
 
     # Mapping waktu Indonesia
     time_map = {
-        "Early_Morning": "dini hari",
-        "Morning": "pagi",
-        "Afternoon": "siang",
-        "Evening": "malam",
-        "Night": "tengah malam"
+        "Early_Morning": "Dini Hari",
+        "Morning": "Pagi",
+        "Afternoon": "Siang",
+        "Evening": "Malam",
+        "Night": "Tengah Malam"
     }
 
     for col in ["departure_time", "arrival_time"]:
@@ -33,8 +33,8 @@ def load_data():
     # Mapping kelas
     if "class" in df.columns:
         df["class"] = df["class"].replace({
-            "Economy": "ekonomi",
-            "Business": "bisnis"
+            "Economy": "Ekonomi",
+            "Business": "Bisnis"
         })
 
     return df
@@ -86,7 +86,7 @@ def advisor(input_data):
 # UI
 # =========================
 st.set_page_config(page_title="AI Flight Price Advisor", layout="wide")
-st.title("✈️ AI Flight Price Advisor (Indonesia - Fast & Stable)")
+st.title("✈️ Aplikasi Prediksi Harga Tiket Pesawat")
 
 df = load_data()
 model, meta = load_model()
