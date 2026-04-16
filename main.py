@@ -7,6 +7,29 @@ MODEL_PATH = "model_tiket.pkl"
 META_PATH = "model_meta.pkl"
 
 # =========================
+# DURATION BINNING (4 bins per hour)
+# =========================
+def create_duration_bins(duration_hours):
+    """
+    Convert duration in hours to 4 time bins per hour.
+    Each hour is divided into 4 bins: 0-15min, 15-30min, 30-45min, 45-60min
+    Maximum 24 hours (96 bins total)
+    """
+    if pd.isna(duration_hours) or duration_hours <= 0:
+        return "Bin_0"
+    
+    # Cap at 24 hours
+    duration_hours = min(float(duration_hours), 24)
+    
+    # Convert to minutes and calculate bin
+    total_minutes = duration_hours * 60
+    bin_number = int(total_minutes // 15)  # Each bin is 15 minutes
+    bin_number = min(bin_number, 95)  # Max 96 bins (24 hours * 4)
+    
+    return f"Bin_{bin_number}"
+
+
+# =========================
 # LOAD DATA
 # =========================
 @st.cache_data
@@ -16,6 +39,10 @@ def load_data():
     # FIX tipe data
     for col in df.select_dtypes(include="object").columns:
         df[col] = df[col].astype(str)
+
+    # Create 4 time bins per hour for duration (max 24 hours)
+    if "duration" in df.columns:
+        df["duration_bin"] = df["duration"].apply(create_duration_bins)
 
     # Mapping waktu Indonesia
     time_map = {
