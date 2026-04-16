@@ -13,37 +13,35 @@ META_PATH = "model_meta.pkl"
 def load_data():
     df = pd.read_csv("airlines_flights_data.csv")
 
+    # 🔥 HAPUS KOLOM TIDAK PERLU
+    df = df.drop(columns=[col for col in ["index", "flight"] if col in df.columns])
 
-# Hapus kolom yang tidak dipakai
-drop_cols = ["index", "flight"]
+    # 🔥 FIX TIPE DATA
+    for col in df.select_dtypes(include="object").columns:
+        df[col] = df[col].astype(str)
 
-for col in drop_cols:
-    if col in df.columns:
-        df = df.drop(columns=[col])
-
-# Pastikan semua kategori string (fix error)
-for col in df.select_dtypes(include="object").columns:
-     df[col] = df[col].astype(str)
-
-# Mapping waktu Indonesia
-time_map = {
-    "Early_Morning": "Dini Hari",
-    "Morning": "Pagi",
-    "Afternoon": "Siang",
-    "Evening": "Sore",
-    "Night": "Malam"
+    # 🔥 MAPPING WAKTU INDONESIA
+    time_map = {
+        "Early_Morning": "Dini hari",
+        "Morning": "Pagi",
+        "Afternoon": "Siang",
+        "Evening": "Sore",
+        "Night": "Malam"
     }
 
-for col in ["departure_time", "arrival_time"]:
+    for col in ["departure_time", "arrival_time"]:
         if col in df.columns:
             df[col] = df[col].replace(time_map)
 
-# Mapping kelas
-if "class" in df.columns:
+    # 🔥 MAPPING KELAS
+    if "class" in df.columns:
         df["class"] = df["class"].replace({
-            "Economy": "ekonomi",
-            "Business": "bisnis"
+            "Economy": "Ekonomi",
+            "Business": "Bisnis"
         })
+
+    return df
+
 
 # =========================
 # LOAD MODEL (FAST)
@@ -53,6 +51,7 @@ def load_model():
     model = joblib.load(MODEL_PATH)
     meta = joblib.load(META_PATH)
     return model, meta
+
 
 # =========================
 # AI ADVISOR
@@ -80,7 +79,7 @@ def advisor(input_data):
 # UI
 # =========================
 st.set_page_config(page_title="AI Flight Price Advisor", layout="wide")
-st.title("✈️ AI Flight Price Advisor (Indonesia - Final)")
+st.title("✈️ AI Flight Price Advisor (Indonesia - Final Clean Version)")
 
 df = load_data()
 model, meta = load_model()
@@ -99,7 +98,7 @@ for i, col in enumerate(feature_cols):
     container = col1 if i % 2 == 0 else col2
 
     # =========================
-    # 🔥 SPECIAL: DURATION
+    # 🔥 DURATION (15 MENIT STEP)
     # =========================
     if col.lower() == "duration":
         val = container.slider(
@@ -107,7 +106,7 @@ for i, col in enumerate(feature_cols):
             min_value=0.0,
             max_value=24.0,
             value=1.0,
-            step=0.25  # 15 menit
+            step=0.25
         )
 
         hours = int(val)
@@ -136,6 +135,7 @@ for i, col in enumerate(feature_cols):
             col,
             sorted(df[col].dropna().astype(str).unique())
         )
+
 
 # =========================
 # PREDIKSI
