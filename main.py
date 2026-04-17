@@ -5,36 +5,18 @@ import streamlit as st  # type: ignore
 MODEL_PATH = "model_tiket.pkl"
 
 # =========================
-# MAP
+# TRANSIT NORMALIZATION
 # =========================
-display_map = {
-    "0 stops": "Langsung",
-    "1 stop": "1 Transit",
-    "2 stops": "2 Transit",
-    "2+ stops": "2+ Transit",
-    "zero": "Langsung",
-    "one": "1 Transit",
-    "two": "2 Transit",
-    "two or more": "2+ Transit",
-}
+def normalize_stops(x):
+    x = str(x).lower()
 
-input_stops_map = {
-    "zero": "Langsung",
-    "one": "1 Transit",
-    "two": "2 Transit",
-    "two or more": "2+ Transit",
-    "0 stops": "Langsung",
-    "1 stop": "1 Transit",
-    "2 stops": "2 Transit",
-    "2+ stops": "2+ Transit",
-}
+    if x in ["0 stops", "zero", "non-stop"]:
+        return "Langsung"
+    elif x in ["1 stop", "one"]:
+        return "1 Transit"
+    else:
+        return "2 Transit"
 
-reverse_input_map = {
-    "Langsung": "zero",
-    "1 Transit": "one",
-    "2 Transit": "two",
-    "2+ Transit": "two or more",
-}
 
 # =========================
 # HELPER
@@ -46,6 +28,9 @@ def format_duration(x):
 
 def format_class(c):
     return "Bisnis" if str(c).lower() == "business" else "Ekonomi"
+
+def format_inr(x):
+    return f"₹ {int(x):,}"
 
 
 # =========================
@@ -60,6 +45,8 @@ def load_data():
     for col in df.select_dtypes(include="object").columns:
         df[col] = df[col].astype(str)
 
+    df["stops_clean"] = df["stops"].apply(normalize_stops)
+
     return df
 
 
@@ -69,38 +56,17 @@ def load_model():
 
 
 # =========================
-# AI ENGINE (FAST VERSION)
+# AI ENGINE
 # =========================
-def find_best_flights(df, model, input_data, top_n=5):
+def find_best_flights(df, model, input_data, top_n=3):
 
-    df_work = df.copy()
+    df_work = df.sample(min(200, len(df)), random_state=42)
 
-    # =========================
-    # FILTER TRANSIT (SMART)
-    # =========================
-    user_stops = input_data.get("stops")
-
-    if user_stops:
-        mapped = reverse_input_map.get(user_stops, user_stops)
-        filtered = df_work[df_work["stops"] == mapped]
-
-        if len(filtered) > 10:
-            df_work = filtered
-
-    # =========================
-    # SAMPLING (CEPAT)
-    # =========================
-    df_work = df_work.sample(min(150, len(df_work)), random_state=42)
-
-    # =========================
-    # PREPARE INPUT SEKALI
-    # =========================
     df_pred = df_work.copy()
 
     for k, v in input_data.items():
         df_pred[k] = v
 
-    # align feature ke model
     if hasattr(model, "feature_names_in_"):
         for col in model.feature_names_in_:
             if col not in df_pred.columns:
@@ -108,18 +74,15 @@ def find_best_flights(df, model, input_data, top_n=5):
 
         df_pred = df_pred[model.feature_names_in_]
 
-    # =========================
-    # 🔥 PREDICT SEKALI
-    # =========================
     try:
         preds = model.predict(df_pred)
     except:
-        return pd.DataFrame(), pd.DataFrame()
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
     df_work["price"] = preds
 
     # =========================
-    # SCORING AI
+    # SCORING
     # =========================
     df_work["price_norm"] = (df_work["price"] - df_work["price"].min()) / (df_work["price"].max() - df_work["price"].min() + 1e-6)
     df_work["duration_norm"] = (df_work["duration"] - df_work["duration"].min()) / (df_work["duration"].max() - df_work["duration"].min() + 1e-6)
@@ -128,14 +91,52 @@ def find_best_flights(df, model, input_data, top_n=5):
 
     df_work = df_work.sort_values("score")
 
-    return df_work.head(top_n), df_work
+    eco = df_work[df_work["class"].str.lower() == "economy"].head(top_n)
+    biz = df_work[df_work["class"].str.lower() == "business"].head(top_n)
+
+    return eco, biz, df_work
+
+
+# =========================
+# AI INSIGHT ENGINE 🔥
+# =========================
+def generate_insight(eco, biz):
+
+    insights = []
+
+    if not eco.empty and not biz.empty:
+
+        eco_best = eco.iloc[0]
+        biz_best = biz.iloc[0]
+
+        price_diff = biz_best["price"] - eco_best["price"]
+        time_diff = eco_best["duration"] - biz_best["duration"]
+
+        # 🔥 insight bisnis vs ekonomi
+        if price_diff > 0 and time_diff > 0:
+            insights.append(
+                f"💡 Upgrade ke Bisnis: tambah {format_inr(price_diff)} untuk hemat {int(time_diff*60)} menit"
+            )
+
+        # 🔥 transit insight
+        if eco_best["stops_clean"] != "Langsung":
+            insights.append(
+                "💡 Penerbangan transit memberikan harga lebih murah dibanding langsung"
+            )
+
+        # 🔥 rekomendasi umum
+        insights.append(
+            "🎯 Rekomendasi terbaik dipilih berdasarkan keseimbangan harga dan durasi"
+        )
+
+    return insights
 
 
 # =========================
 # UI
 # =========================
 st.set_page_config(page_title="AI Flight Optimizer", layout="wide")
-st.title("✈️ AI Flight Optimizer (Fast Version)")
+st.title("✈️ AI Flight Optimizer + Insight")
 
 df = load_data()
 model = load_model()
@@ -143,7 +144,7 @@ model = load_model()
 input_data = {}
 
 # =========================
-# ROUTE (AUTO DETECT)
+# ROUTE
 # =========================
 col1, col2 = st.columns(2)
 
@@ -161,16 +162,7 @@ else:
     st.error("Kolom tujuan tidak ditemukan")
 
 # =========================
-# STOPS
-# =========================
-raw_stops = sorted(df["stops"].unique())
-display_stops = [input_stops_map.get(str(x).lower(), x) for x in raw_stops]
-
-selected = st.selectbox("Jumlah Transit", display_stops)
-input_data["stops"] = selected
-
-# =========================
-# DAYS
+# DAYS (STEP 1 🔥)
 # =========================
 input_data["days_left"] = st.slider("Sisa Hari", 0, 30, 10, step=1)
 
@@ -179,32 +171,37 @@ input_data["days_left"] = st.slider("Sisa Hari", 0, 30, 10, step=1)
 # =========================
 if st.button("🚀 Cari Rekomendasi Terbaik"):
 
-    top, all_data = find_best_flights(df, model, input_data)
+    eco, biz, all_data = find_best_flights(df, model, input_data)
 
-    if top.empty:
-        st.warning("Tidak ada hasil ditemukan, coba ubah parameter")
+    if eco.empty and biz.empty:
+        st.warning("Tidak ada hasil ditemukan")
     else:
-        cheapest = all_data.loc[all_data["price"].idxmin()]
-        fastest = all_data.loc[all_data["duration"].idxmin()]
+        st.subheader("💰 Top 3 Ekonomi")
 
-        st.subheader("🏆 Rekomendasi Terbaik")
-
-        for i, r in top.iterrows():
-
-            tag = ""
-
-            if r["flight"] == cheapest["flight"]:
-                tag += " 💰 Termurah"
-            if r["flight"] == fastest["flight"]:
-                tag += " ⚡ Tercepat"
-            if i == top.index[0]:
-                tag += " ⭐ Best Value"
-
+        for _, r in eco.iterrows():
             st.write(
                 f"✈️ {r['airline']} ({r['flight']}) | "
-                f"{display_map.get(r['stops'], r['stops'])} | "
+                f"{r['stops_clean']} | "
                 f"⏱ {format_duration(r['duration'])} | "
-                f"💺 {format_class(r['class'])} | "
-                f"💰 INR {int(r['price']):,}"
-                f"{tag}"
+                f"💰 {format_inr(r['price'])}"
             )
+
+        st.subheader("💺 Top 3 Bisnis")
+
+        for _, r in biz.iterrows():
+            st.write(
+                f"✈️ {r['airline']} ({r['flight']}) | "
+                f"{r['stops_clean']} | "
+                f"⏱ {format_duration(r['duration'])} | "
+                f"💰 {format_inr(r['price'])}"
+            )
+
+        # =========================
+        # 🔥 INSIGHT SECTION
+        # =========================
+        st.subheader("🧠 Insight AI")
+
+        insights = generate_insight(eco, biz)
+
+        for i in insights:
+            st.write(i)
