@@ -205,6 +205,6 @@ if st.button("🚀 Cari Rekomendasi Terbaik"):
                 f"{display_map.get(r['stops'], r['stops'])} | "
                 f"⏱ {format_duration(r['duration'])} | "
                 f"💺 {format_class(r['class'])} | "
-                f"💰 Rp {int(r['price']):,}"
+                f"💰 INR {int(r['price']):,}"
                 f"{tag}"
             )
