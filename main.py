@@ -4,10 +4,10 @@
 # ============================================================
 
 import os
-import numpy as np
-import pandas as pd
-import joblib
-import streamlit as st
+import numpy as np  # type: ignore
+import pandas as pd  # type: ignore   
+import joblib   # type: ignore
+import streamlit as st  # type: ignore
 
 
 # ============================================================
