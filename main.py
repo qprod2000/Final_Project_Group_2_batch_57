@@ -9,7 +9,6 @@ MODEL_PATH = "model_tiket.pkl"
 # =========================
 def normalize_stops(x):
     x = str(x).lower()
-
     if x in ["0 stops", "zero", "non-stop"]:
         return "Langsung"
     elif x in ["1 stop", "one"]:
@@ -26,11 +25,11 @@ def format_duration(x):
     m = int((x - h) * 60)
     return f"{h} jam {m} menit"
 
-def format_class(c):
-    return "Bisnis" if str(c).lower() == "business" else "Ekonomi"
-
 def format_inr(x):
     return f"₹ {int(x):,}"
+
+def format_class(c):
+    return "Bisnis" if str(c).lower() == "business" else "Ekonomi"
 
 
 # =========================
@@ -56,12 +55,19 @@ def load_model():
 
 
 # =========================
-# AI ENGINE
+# AI ENGINE (BALANCED)
 # =========================
 def find_best_flights(df, model, input_data, top_n=3):
 
-    df_work = df.sample(min(200, len(df)), random_state=42)
+    # 🔥 STRATIFIED SAMPLING (FIX UTAMA)
+    df_work = (
+        df.groupby("stops_clean", group_keys=False)
+        .apply(lambda x: x.sample(min(60, len(x)), random_state=42))
+    )
 
+    # =========================
+    # PREPARE
+    # =========================
     df_pred = df_work.copy()
 
     for k, v in input_data.items():
@@ -77,17 +83,29 @@ def find_best_flights(df, model, input_data, top_n=3):
     try:
         preds = model.predict(df_pred)
     except:
-        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+        return pd.DataFrame(), pd.DataFrame()
 
     df_work["price"] = preds
 
     # =========================
-    # SCORING
+    # BALANCED SCORING ⚖️
     # =========================
     df_work["price_norm"] = (df_work["price"] - df_work["price"].min()) / (df_work["price"].max() - df_work["price"].min() + 1e-6)
     df_work["duration_norm"] = (df_work["duration"] - df_work["duration"].min()) / (df_work["duration"].max() - df_work["duration"].min() + 1e-6)
 
-    df_work["score"] = df_work["price_norm"] * 0.7 + df_work["duration_norm"] * 0.3
+    stops_weight = {
+        "Langsung": 0.0,
+        "1 Transit": 0.2,
+        "2 Transit": 0.4
+    }
+
+    df_work["stops_penalty"] = df_work["stops_clean"].map(stops_weight)
+
+    df_work["score"] = (
+        df_work["price_norm"] * 0.6 +
+        df_work["duration_norm"] * 0.3 +
+        df_work["stops_penalty"] * 0.1
+    )
 
     df_work = df_work.sort_values("score")
 
@@ -98,7 +116,7 @@ def find_best_flights(df, model, input_data, top_n=3):
 
 
 # =========================
-# AI INSIGHT ENGINE 🔥
+# INSIGHT ENGINE
 # =========================
 def generate_insight(eco, biz):
 
@@ -112,22 +130,15 @@ def generate_insight(eco, biz):
         price_diff = biz_best["price"] - eco_best["price"]
         time_diff = eco_best["duration"] - biz_best["duration"]
 
-        # 🔥 insight bisnis vs ekonomi
         if price_diff > 0 and time_diff > 0:
             insights.append(
                 f"💡 Upgrade ke Bisnis: tambah {format_inr(price_diff)} untuk hemat {int(time_diff*60)} menit"
             )
 
-        # 🔥 transit insight
         if eco_best["stops_clean"] != "Langsung":
-            insights.append(
-                "💡 Penerbangan transit memberikan harga lebih murah dibanding langsung"
-            )
+            insights.append("💡 Transit memberikan opsi harga lebih hemat")
 
-        # 🔥 rekomendasi umum
-        insights.append(
-            "🎯 Rekomendasi terbaik dipilih berdasarkan keseimbangan harga dan durasi"
-        )
+        insights.append("🎯 AI memilih berdasarkan keseimbangan harga, waktu, dan transit")
 
     return insights
 
@@ -136,16 +147,14 @@ def generate_insight(eco, biz):
 # UI
 # =========================
 st.set_page_config(page_title="AI Flight Optimizer", layout="wide")
-st.title("✈️ AI Flight Optimizer + Insight")
+st.title("✈️ AI Flight Optimizer (Balanced AI)")
 
 df = load_data()
 model = load_model()
 
 input_data = {}
 
-# =========================
 # ROUTE
-# =========================
 col1, col2 = st.columns(2)
 
 source_col = next((c for c in ["source", "source_city"] if c in df.columns), None)
@@ -153,55 +162,34 @@ dest_col = next((c for c in ["destination", "destination_city"] if c in df.colum
 
 if source_col:
     input_data[source_col] = col1.selectbox("Kota Asal", sorted(df[source_col].unique()))
-else:
-    st.error("Kolom asal tidak ditemukan")
 
 if dest_col:
     input_data[dest_col] = col2.selectbox("Kota Tujuan", sorted(df[dest_col].unique()))
-else:
-    st.error("Kolom tujuan tidak ditemukan")
 
-# =========================
-# DAYS (STEP 1 🔥)
-# =========================
+# DAYS
 input_data["days_left"] = st.slider("Sisa Hari", 0, 30, 10, step=1)
 
-# =========================
 # RUN
-# =========================
 if st.button("🚀 Cari Rekomendasi Terbaik"):
 
     eco, biz, all_data = find_best_flights(df, model, input_data)
 
-    if eco.empty and biz.empty:
-        st.warning("Tidak ada hasil ditemukan")
-    else:
-        st.subheader("💰 Top 3 Ekonomi")
+    st.subheader("💰 Top 3 Ekonomi")
+    for _, r in eco.iterrows():
+        st.write(
+            f"✈️ {r['airline']} ({r['flight']}) | "
+            f"{r['stops_clean']} | ⏱ {format_duration(r['duration'])} | "
+            f"💰 {format_inr(r['price'])}"
+        )
 
-        for _, r in eco.iterrows():
-            st.write(
-                f"✈️ {r['airline']} ({r['flight']}) | "
-                f"{r['stops_clean']} | "
-                f"⏱ {format_duration(r['duration'])} | "
-                f"💰 {format_inr(r['price'])}"
-            )
+    st.subheader("💺 Top 3 Bisnis")
+    for _, r in biz.iterrows():
+        st.write(
+            f"✈️ {r['airline']} ({r['flight']}) | "
+            f"{r['stops_clean']} | ⏱ {format_duration(r['duration'])} | "
+            f"💰 {format_inr(r['price'])}"
+        )
 
-        st.subheader("💺 Top 3 Bisnis")
-
-        for _, r in biz.iterrows():
-            st.write(
-                f"✈️ {r['airline']} ({r['flight']}) | "
-                f"{r['stops_clean']} | "
-                f"⏱ {format_duration(r['duration'])} | "
-                f"💰 {format_inr(r['price'])}"
-            )
-
-        # =========================
-        # 🔥 INSIGHT SECTION
-        # =========================
-        st.subheader("🧠 Insight AI")
-
-        insights = generate_insight(eco, biz)
-
-        for i in insights:
-            st.write(i)
+    st.subheader("🧠 Insight AI")
+    for i in generate_insight(eco, biz):
+        st.write(i)
