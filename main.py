@@ -13,7 +13,6 @@ import streamlit as st  # type: ignore
 from sklearn.model_selection import train_test_split    # type: ignore
 from sklearn.ensemble import RandomForestRegressor  # type: ignore
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score   # type: ignore
-from xgboost import XGBRegressor    # type: ignore
 
 
 # ============================================================
@@ -197,11 +196,10 @@ def load_data():
 
 @st.cache_resource(show_spinner="Memuat model ML...")
 def load_model():
-    # Cari model: utama → legacy RF → legacy XGB
+    # Cari model: utama → legacy
     candidates = [
-        "model/best_model.pkl",
         "model/random_forest.pkl",
-        "model/xgboost.pkl",
+        "model/best_model.pkl",
     ]
     for path in candidates:
         if os.path.exists(path):
@@ -218,62 +216,36 @@ model, model_status, model_msg = load_model()
 
 
 # ============================================================
-# SIDEBAR
+# HEADER
 # ============================================================
 
-with st.sidebar:
+col_title, col_badge = st.columns([5, 2])
+with col_title:
+    st.markdown('<div class="app-title">✈️ AI Flight Optimizer</div>', unsafe_allow_html=True)
     st.markdown(
-        '<div style="font-family:\'Syne\',sans-serif;font-size:18px;font-weight:700;'
-        'color:#f0eeea;margin-bottom:4px;">✈️ Flight Optimizer</div>',
+        f'<div class="app-subtitle">{len(df):,} penerbangan · '
+        f'{df["airline"].nunique()} maskapai · {df["source_city"].nunique()} kota</div>',
         unsafe_allow_html=True,
     )
-    st.markdown(
-        '<div style="font-family:\'DM Mono\',monospace;font-size:11px;'
-        'color:#5a5870;margin-bottom:20px;">AI-powered · v1.0</div>',
-        unsafe_allow_html=True,
-    )
-
-    page = st.radio(
-        "Navigasi",
-        ["🔍 Cari Penerbangan", "🤖 Train Model"],
-        label_visibility="collapsed",
-    )
-
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown(
-        '<div style="font-size:10px;color:#5a5870;text-transform:uppercase;'
-        'letter-spacing:0.5px;margin-bottom:8px;">Status Model</div>',
-        unsafe_allow_html=True,
-    )
+with col_badge:
     badge_cls = {"ok": "model-ok", "missing": "model-miss", "error": "model-err"}[model_status]
     badge_ico = {"ok": "●", "missing": "◌", "error": "✕"}[model_status]
     badge_txt = {"ok": "Model aktif", "missing": "Belum ada model", "error": "Model error"}[model_status]
     st.markdown(
-        f'<span class="model-badge {badge_cls}">{badge_ico} {badge_txt}</span>',
+        f'<br><span class="model-badge {badge_cls}">{badge_ico} {badge_txt}</span>',
         unsafe_allow_html=True,
     )
-    if model_status == "ok":
-        st.caption(f"📁 `{MODEL_PATH}`")
-    else:
-        st.caption("Pergi ke **Train Model** untuk membuat model baru.")
 
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.caption(f"📊 {len(df):,} penerbangan")
-    st.caption(f"🏙️ {df['source_city'].nunique()} kota · {df['airline'].nunique()} maskapai")
+st.markdown("---")
+
+tab_search, tab_train = st.tabs(["🔍 Cari Penerbangan", "🤖 Train Model"])
 
 
 # ============================================================
-# PAGE 1 — Cari Penerbangan
+# TAB 1 — Cari Penerbangan
 # ============================================================
 
-if page == "🔍 Cari Penerbangan":
-
-    st.markdown('<div class="app-title">Cari Penerbangan Terbaik</div>', unsafe_allow_html=True)
-    st.markdown(
-        '<div class="app-subtitle">Rekomendasi berdasarkan harga, durasi &amp; jumlah transit</div>',
-        unsafe_allow_html=True,
-    )
-    st.markdown("---")
+with tab_search:
 
     col1, col2, col3 = st.columns([2, 2, 3])
     with col1:
@@ -405,32 +377,22 @@ if page == "🔍 Cari Penerbangan":
         with col_biz:
             render_section(biz, "Business")
 
-        with st.expander("📊 Lihat Data Mentah"):
-            combined  = pd.concat([eco, biz]).reset_index(drop=True)
-            show_cols = ["airline", "flight", "class", "departure_time",
-                         "arrival_time", "stops", "duration", "price"]
-            if "predicted_price" in combined.columns:
-                show_cols.append("predicted_price")
-            st.dataframe(combined[[c for c in show_cols if c in combined.columns]],
-                         use_container_width=True)
+
 
 
 # ============================================================
-# PAGE 2 — Train Model
+# TAB 2 — Train Model
 # ============================================================
 
-elif page == "🤖 Train Model":
+with tab_train:
 
-    st.markdown('<div class="app-title">Auto Train &amp; Select Model</div>', unsafe_allow_html=True)
+    st.markdown('<div class="app-title">Train Model</div>', unsafe_allow_html=True)
     st.markdown(
-        '<div class="app-subtitle">'
-        'Random Forest &amp; XGBoost dilatih otomatis — model terbaik dipilih &amp; disimpan'
-        '</div>',
+        '<div class="app-subtitle">Latih Random Forest dari dataset, lalu download file .pkl</div>',
         unsafe_allow_html=True,
     )
     st.markdown("---")
 
-    # ── Info box ─────────────────────────────────────────────
     st.markdown("""
     <div style="background:#13131a;border:0.5px solid rgba(255,255,255,0.08);
                 border-radius:12px;padding:16px 20px;margin-bottom:20px;">
@@ -438,14 +400,12 @@ elif page == "🤖 Train Model":
         Klik tombol di bawah — sistem akan otomatis:
         <span style="color:#f0eeea;">① Preprocessing data</span> →
         <span style="color:#1D9E75;">② Latih Random Forest</span> →
-        <span style="color:#7F77DD;">③ Latih XGBoost</span> →
-        <span style="color:#e8c84a;">④ Bandingkan R² Score</span> →
-        <span style="color:#f0eeea;">⑤ Simpan model terbaik sebagai <code>model/best_model.pkl</code></span>
+        <span style="color:#e8c84a;">③ Evaluasi model</span> →
+        <span style="color:#f0eeea;">④ Simpan sebagai <code>model/random_forest.pkl</code></span>
       </div>
     </div>
     """, unsafe_allow_html=True)
 
-    # ── Parameter (collapsed di expander) ────────────────────
     with st.expander("⚙️ Parameter Training (opsional)", expanded=False):
         col_a, col_b, col_c = st.columns(3)
         with col_a:
@@ -456,11 +416,7 @@ elif page == "🤖 Train Model":
             random_state = st.number_input("Random State", value=42, step=1)
 
     st.markdown("<br>", unsafe_allow_html=True)
-    train_btn = st.button(
-        "🚀 Mulai Auto Training",
-        use_container_width=True,
-        type="primary",
-    )
+    train_btn = st.button("🚀 Mulai Training", use_container_width=True, type="primary")
 
     if train_btn:
         log_lines    = []
@@ -474,7 +430,7 @@ elif page == "🤖 Train Model":
                 unsafe_allow_html=True,
             )
 
-        # ── 1. Preprocessing ─────────────────────────────────
+        # 1. Preprocessing
         log("⟳ Preprocessing data...")
         train_df = df.copy()
         train_df = train_df.drop(columns=[c for c in ["index", "flight"] if c in train_df.columns])
@@ -491,15 +447,12 @@ elif page == "🤖 Train Model":
         X_train, X_test, y_train, y_test = train_test_split(
             X, y, test_size=test_size / 100, random_state=int(random_state)
         )
-        progress_bar.progress(10, text="Data siap — mulai training...")
+        progress_bar.progress(15, text="Melatih Random Forest...")
         log(f"✓ {len(train_df):,} baris · {X.shape[1]} fitur · "
             f"train={len(X_train):,} test={len(X_test):,}")
 
-        results   = {}   # nama → {model, r2, r2_train, mae, rmse, elapsed}
-
-        # ── 2. Random Forest ─────────────────────────────────
-        log("⟳ [1/2] Melatih Random Forest...")
-        progress_bar.progress(20, text="Training Random Forest...")
+        # 2. Train
+        log(f"⟳ Melatih Random Forest · n_estimators={n_estimators}...")
         t0 = time.time()
         rf = RandomForestRegressor(
             n_estimators=int(n_estimators),
@@ -507,149 +460,84 @@ elif page == "🤖 Train Model":
             n_jobs=-1,
         )
         rf.fit(X_train, y_train)
-        t_rf = time.time() - t0
+        elapsed = time.time() - t0
+        progress_bar.progress(80, text="Mengevaluasi model...")
+        log(f"✓ Training selesai dalam {elapsed:.1f} detik")
 
-        y_pred_rf  = rf.predict(X_test)
-        results["Random Forest"] = {
-            "model":    rf,
-            "r2":       r2_score(y_test, y_pred_rf),
-            "r2_train": rf.score(X_train, y_train),
-            "mae":      mean_absolute_error(y_test, y_pred_rf),
-            "rmse":     np.sqrt(mean_squared_error(y_test, y_pred_rf)),
-            "elapsed":  t_rf,
-        }
-        rf_r = results["Random Forest"]
-        progress_bar.progress(55, text="Training XGBoost...")
-        log(f"✓ Random Forest selesai ({t_rf:.1f}s) · "
-            f"R²={rf_r['r2']:.4f} · MAE=₹{rf_r['mae']:,.0f}")
+        # 3. Evaluasi
+        y_pred   = rf.predict(X_test)
+        r2       = r2_score(y_test, y_pred)
+        r2_train = rf.score(X_train, y_train)
+        mae      = mean_absolute_error(y_test, y_pred)
+        rmse     = np.sqrt(mean_squared_error(y_test, y_pred))
+        log(f"✓ R²={r2:.4f} · MAE=₹{mae:,.0f} · RMSE=₹{rmse:,.0f}")
 
-        # ── 3. XGBoost ───────────────────────────────────────
-        log("⟳ [2/2] Melatih XGBoost...")
-        t0 = time.time()
-        xgb = XGBRegressor(
-            n_estimators=int(n_estimators),
-            learning_rate=0.1,
-            max_depth=6,
-            random_state=int(random_state),
-            n_jobs=-1,
-            verbosity=0,
-        )
-        xgb.fit(X_train, y_train)
-        t_xgb = time.time() - t0
-
-        y_pred_xgb = xgb.predict(X_test)
-        results["XGBoost"] = {
-            "model":    xgb,
-            "r2":       r2_score(y_test, y_pred_xgb),
-            "r2_train": xgb.score(X_train, y_train),
-            "mae":      mean_absolute_error(y_test, y_pred_xgb),
-            "rmse":     np.sqrt(mean_squared_error(y_test, y_pred_xgb)),
-            "elapsed":  t_xgb,
-        }
-        xgb_r = results["XGBoost"]
-        progress_bar.progress(85, text="Membandingkan & menyimpan...")
-        log(f"✓ XGBoost selesai ({t_xgb:.1f}s) · "
-            f"R²={xgb_r['r2']:.4f} · MAE=₹{xgb_r['mae']:,.0f}")
-
-        # ── 4. Pilih model terbaik ────────────────────────────
-        best_name  = max(results, key=lambda k: results[k]["r2"])
-        other_name = [k for k in results if k != best_name][0]
-        best       = results[best_name]
-        other      = results[other_name]
-        margin     = best["r2"] - other["r2"]
-
-        log(f"★ Model terbaik: {best_name} "
-            f"(R² lebih tinggi {margin:.4f} dari {other_name})")
-
-        # ── 5. Simpan ─────────────────────────────────────────
+        # 4. Simpan
+        progress_bar.progress(95, text="Menyimpan model...")
         os.makedirs("model", exist_ok=True)
-        fpath = "model/best_model.pkl"
-        joblib.dump(best["model"], fpath)
+        fpath = "model/random_forest.pkl"
+        joblib.dump(rf, fpath)
 
         buf = io.BytesIO()
-        joblib.dump(best["model"], buf)
+        joblib.dump(rf, buf)
         buf.seek(0)
         model_bytes = buf.read()
 
         progress_bar.progress(100, text="Selesai!")
         log(f"✓ Disimpan → {fpath} ({len(model_bytes)/1024:.1f} KB)")
 
-        # ── Tabel perbandingan ────────────────────────────────
+        # ── Metrik ───────────────────────────────────────────
         st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown("#### 📊 Perbandingan Model")
+        st.markdown("#### 📊 Hasil Evaluasi")
 
-        winner_ico = {"Random Forest": "🌲", "XGBoost": "⚡"}
-        for name, res in results.items():
-            is_best   = name == best_name
-            border    = "rgba(232,200,74,0.35)" if is_best else "rgba(255,255,255,0.08)"
-            bg        = "rgba(232,200,74,0.04)" if is_best else "#13131a"
-            crown     = f'<span style="color:#e8c84a;margin-left:8px;">★ Terpilih</span>' if is_best else ""
-            ico       = winner_ico.get(name, "🤖")
-            name_color = "#1D9E75" if name == "Random Forest" else "#7F77DD"
-
+        m1, m2, m3, m4 = st.columns(4)
+        with m1:
             st.markdown(f"""
-            <div style="background:{bg};border:0.5px solid {border};
-                        border-radius:13px;padding:18px 20px;margin-bottom:10px;">
-              <div style="display:flex;align-items:center;justify-content:space-between;
-                          margin-bottom:14px;">
-                <div style="font-size:15px;font-weight:600;color:{name_color};">
-                  {ico} {name}{crown}
-                </div>
-                <div style="font-family:'DM Mono',monospace;font-size:11px;color:#5a5870;">
-                  {res['elapsed']:.1f}s
-                </div>
-              </div>
-              <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;">
-                <div class="metric-box" style="margin:0;">
-                  <div class="metric-name">R² Test</div>
-                  <div class="metric-val" style="color:{'#1D9E75' if is_best else '#f0eeea'};
-                       font-size:18px;">{res['r2']:.4f}</div>
-                </div>
-                <div class="metric-box" style="margin:0;">
-                  <div class="metric-name">R² Train</div>
-                  <div class="metric-val" style="color:#9593a0;font-size:18px;">
-                    {res['r2_train']:.4f}</div>
-                </div>
-                <div class="metric-box" style="margin:0;">
-                  <div class="metric-name">MAE</div>
-                  <div class="metric-val" style="color:#f0eeea;font-size:18px;">
-                    ₹{res['mae']:,.0f}</div>
-                </div>
-                <div class="metric-box" style="margin:0;">
-                  <div class="metric-name">RMSE</div>
-                  <div class="metric-val" style="color:#f0eeea;font-size:18px;">
-                    ₹{res['rmse']:,.0f}</div>
-                </div>
-              </div>
-            </div>
-            """, unsafe_allow_html=True)
+            <div class="metric-box">
+              <div class="metric-name">R² Score (Test)</div>
+              <div class="metric-val" style="color:#1D9E75;">{r2:.4f}</div>
+            </div>""", unsafe_allow_html=True)
+        with m2:
+            st.markdown(f"""
+            <div class="metric-box">
+              <div class="metric-name">R² Score (Train)</div>
+              <div class="metric-val" style="color:#7F77DD;">{r2_train:.4f}</div>
+            </div>""", unsafe_allow_html=True)
+        with m3:
+            st.markdown(f"""
+            <div class="metric-box">
+              <div class="metric-name">MAE</div>
+              <div class="metric-val" style="color:#f0eeea;">₹{mae:,.0f}</div>
+            </div>""", unsafe_allow_html=True)
+        with m4:
+            st.markdown(f"""
+            <div class="metric-box">
+              <div class="metric-name">RMSE</div>
+              <div class="metric-val" style="color:#f0eeea;">₹{rmse:,.0f}</div>
+            </div>""", unsafe_allow_html=True)
 
         # ── Feature Importance ────────────────────────────────
-        if hasattr(best["model"], "feature_importances_"):
-            fi = pd.DataFrame({
-                "Fitur":      X_train.columns,
-                "Importance": best["model"].feature_importances_,
-            }).sort_values("Importance", ascending=False).head(10)
-            with st.expander(f"🔍 Top 10 Feature Importance ({best_name})"):
-                st.dataframe(fi.reset_index(drop=True), use_container_width=True)
+        fi = pd.DataFrame({
+            "Fitur":      X_train.columns,
+            "Importance": rf.feature_importances_,
+        }).sort_values("Importance", ascending=False).head(10)
+        with st.expander("🔍 Top 10 Feature Importance"):
+            st.dataframe(fi.reset_index(drop=True), use_container_width=True)
 
         # ── Download ──────────────────────────────────────────
         st.markdown("<br>", unsafe_allow_html=True)
-        st.success(
-            f"✅ **{best_name}** terpilih sebagai model terbaik "
-            f"(R²={best['r2']:.4f}) dan disimpan ke `{fpath}`"
-        )
+        st.success(f"✅ Model disimpan ke `{fpath}` · R²={r2:.4f}")
 
         st.download_button(
-            label=f"⬇️ Download best_model.pkl  ({best_name})",
+            label="⬇️ Download random_forest.pkl",
             data=model_bytes,
-            file_name="best_model.pkl",
+            file_name="random_forest.pkl",
             mime="application/octet-stream",
             use_container_width=True,
         )
 
         st.info(
-            "Setelah download, letakkan `best_model.pkl` ke folder `model/` "
+            "Setelah download, letakkan `random_forest.pkl` ke folder `model/` "
             "lalu refresh halaman — model akan otomatis aktif.",
             icon="💡",
         )
