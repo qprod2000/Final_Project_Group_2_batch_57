@@ -258,7 +258,7 @@ with tab_search:
         days_left = st.slider("📅 Sisa Hari Sebelum Keberangkatan", 1, 49, 10, 1)
 
     st.markdown("<br>", unsafe_allow_html=True)
-    search = st.button("🔍 Cari Rekomendasi Terbaik", use_container_width=True, type="primary")
+    search = st.button("🔍 Cari Rekomendasi Terbaik", width="stretch", type="primary")
 
     if search:
         if src == dst:
@@ -416,7 +416,7 @@ with tab_train:
             random_state = st.number_input("Random State", value=42, step=1)
 
     st.markdown("<br>", unsafe_allow_html=True)
-    train_btn = st.button("🚀 Mulai Training", use_container_width=True, type="primary")
+    train_btn = st.button("🚀 Mulai Training", width="stretch", type="primary")
 
     if train_btn:
         log_lines    = []
@@ -522,7 +522,7 @@ with tab_train:
             "Importance": rf.feature_importances_,
         }).sort_values("Importance", ascending=False).head(10)
         with st.expander("🔍 Top 10 Feature Importance"):
-            st.dataframe(fi.reset_index(drop=True), use_container_width=True)
+            st.dataframe(fi.reset_index(drop=True), width="stretch")
 
         # ── Download ──────────────────────────────────────────
         st.markdown("<br>", unsafe_allow_html=True)
@@ -533,7 +533,7 @@ with tab_train:
             data=model_bytes,
             file_name="random_forest.pkl",
             mime="application/octet-stream",
-            use_container_width=True,
+            width="stretch",
         )
 
         st.info(
