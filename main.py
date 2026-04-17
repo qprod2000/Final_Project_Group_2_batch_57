@@ -1,6 +1,6 @@
-import streamlit as st
-import pandas as pd
-import joblib
+import streamlit as st  # type: ignore
+import pandas as pd # type: ignore
+import joblib   # type: ignore
 
 from config import MODEL_PATH, TOP_N
 from utils import format_duration, format_inr

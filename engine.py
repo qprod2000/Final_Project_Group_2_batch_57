@@ -1,4 +1,4 @@
-import pandas as pd
+import pandas as pd #type: ignore
 from utils import normalize_stops
 
 def find_best_flights(df, model, input_data, top_n=3):
