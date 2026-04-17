@@ -1,25 +1,53 @@
 import pandas as pd # type: ignore
-import joblib   # type: ignore  
+import joblib   # type: ignore
+import streamlit as st  # type: ignore
+import numpy as np
+from utils import normalize_stops
 
-def find_best_flights(df, model, input_data, preference=50):
+
+def find_best_flights(df, model, input_data, preference=50, top_n=3):
     df = df.copy()
 
+    # normalize stops
+    df["stops_clean"] = df["stops"].apply(normalize_stops)
+
+    # sampling biar cepat
     df = df.sample(min(300, len(df)), random_state=42)
 
-    df["price"] = model.predict(df[model.feature_names_in_])
+    # ====== PREPARE FEATURE ======
+    df_pred = df.copy()
+    for k, v in input_data.items():
+        df_pred[k] = v
 
-    base_price = df["price"].mean()
-    base_duration = df["duration"].mean()
+    # align dengan model
+    if hasattr(model, "feature_names_in_"):
+        for col in model.feature_names_in_:
+            if col not in df_pred.columns:
+                df_pred[col] = 0
+        df_pred = df_pred[model.feature_names_in_]
 
-    penalty = 20 + (100 - preference)
+    # ====== PREDICT ======
+    df["price"] = model.predict(df_pred)
 
-    df["value_score"] = (
-        (base_price - df["price"]) -
-        ((df["duration"] - base_duration) * penalty)
-    )
+    # ====== BASELINE (DIRECT) ======
+    direct = df[df["stops_clean"] == "Langsung"]
+    base_price = direct["price"].min() if not direct.empty else df["price"].median()
+    base_duration = direct["duration"].min() if not direct.empty else df["duration"].median()
 
-    eco = df[df["class"] == "Economy"].sort_values("value_score", ascending=False).head(3)
-    biz = df[df["class"] == "Business"].sort_values("value_score", ascending=False).head(3)
+    # ====== VALUE SCORE ======
+    # preferensi: 0 = hemat, 100 = cepat
+    penalty = 30 + (100 - preference)
+
+    df["price_saving"] = base_price - df["price"]
+    df["extra_time"] = df["duration"] - base_duration
+
+    df["value_score"] = df["price_saving"] - (df["extra_time"] * penalty)
+
+    # ====== SORT ======
+    df = df.sort_values("value_score", ascending=False)
+
+    eco = df[df["class"].str.lower() == "economy"].head(top_n)
+    biz = df[df["class"].str.lower() == "business"].head(top_n)
 
     return eco, biz, base_price, base_duration
 
@@ -29,6 +57,6 @@ def explain(row, base_price, base_duration):
     extra_time = row["duration"] - base_duration
 
     if saving > 0:
-        return f"Hemat ₹{int(saving)} (+{extra_time:.1f} jam)"
+        return f"Hemat ₹{int(saving)} walaupun +{extra_time:.1f} jam"
     else:
-        return f"Lebih cepat {abs(extra_time):.1f} jam"
+        return f"Lebih cepat {abs(extra_time):.1f} jam walaupun lebih mahal"
