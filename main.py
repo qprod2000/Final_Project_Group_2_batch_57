@@ -4,10 +4,10 @@
 # ============================================================
 
 import os
-import numpy as np  # type: ignore
-import pandas as pd # type: ignore
-import joblib      # type: ignore
-import streamlit as st  # type: ignore
+import numpy as np
+import pandas as pd
+import joblib
+import streamlit as st
 
 
 # ============================================================
@@ -86,14 +86,36 @@ def _preprocess(df_input: pd.DataFrame) -> pd.DataFrame:
 
 
 def _score_no_model(df_filtered: pd.DataFrame, days_left: int) -> pd.Series:
-    prices = df_filtered["price"].values.astype(float)
-    durs   = df_filtered["duration"].values.astype(float)
-    p_min, p_range = prices.min(), prices.max() - prices.min() or 1.0
-    d_min, d_range = durs.min(),   durs.max()   - durs.min()   or 1.0
-    norm_p  = (prices - p_min) / p_range
-    norm_d  = (durs   - d_min) / d_range
+    """
+    Score berbasis nilai — lebih rendah = lebih direkomendasikan.
+    Bobot: harga 55% + durasi 25% + penalti transit 10% + urgensi 10%
+
+    Catatan transit:
+    - Transit TIDAK otomatis dihukum berat — penalti hanya 10%
+    - Jika transit jauh lebih murah, skor totalnya tetap bisa menang
+    - Ini mencerminkan temuan data: 26.7% rute, transit lebih murah
+    """
+    prices  = df_filtered["price"].values.astype(float)
+    durs    = df_filtered["duration"].values.astype(float)
+    stops   = df_filtered["stops"].map(STOPS_MAPPING).fillna(0).values.astype(float)
+
+    p_min, p_range = prices.min(), (prices.max() - prices.min()) or 1.0
+    d_min, d_range = durs.min(),   (durs.max()   - durs.min())   or 1.0
+    s_range        = stops.max() or 1.0
+
+    norm_p = (prices - p_min) / p_range   # 0 = termurah
+    norm_d = (durs   - d_min) / d_range   # 0 = terpendek
+    norm_s = stops / s_range              # 0 = non-stop, 0.5 = 1 henti, 1 = 2+
+
+    # Penalti urgensi: beli last-minute → harga cenderung lebih tinggi
     urgency = 0.3 if days_left <= 3 else 0.1 if days_left <= 7 else 0.0
-    score   = norm_p * 0.60 + norm_d * 0.25 + norm_p * urgency * 0.15
+
+    score = (
+        norm_p * 0.55
+        + norm_d * 0.25
+        + norm_s * 0.10
+        + norm_p * urgency * 0.10
+    )
     return pd.Series(score, index=df_filtered.index)
 
 
@@ -133,8 +155,14 @@ def find_best_flights(df, model, input_data, top_n=TOP_N):
         sub = df_route[df_route["class"] == class_name].copy()
         if sub.empty:
             return sub
+
         sub = sub.sort_values(sort_col, ascending=True)
-        sub = sub.drop_duplicates(subset=["airline"], keep="first")
+
+        # Deduplikasi: ambil 1 baris terbaik per kombinasi maskapai+stops
+        # Ini memungkinkan maskapai yang sama muncul 2x jika
+        # versi transit-nya jauh lebih murah dari versi non-stop-nya
+        sub = sub.drop_duplicates(subset=["airline", "stops"], keep="first")
+
         return sub.head(top_n).reset_index(drop=True)
 
     return _top("Economy"), _top("Business")
@@ -259,17 +287,51 @@ if search:
         st.warning(f"Tidak ada data untuk rute **{src} → {dst}**.")
         st.stop()
 
+    # ── Cek apakah transit mengungguli non-stop di rute ini ──────
+    def _transit_insight(results: pd.DataFrame) -> str:
+        """Kembalikan string insight jika hasil #1 adalah penerbangan transit."""
+        if results.empty or results.iloc[0]["stops"] == "zero":
+            return ""
+        top_row    = results.iloc[0]
+        stops_lbl  = STOPS_LABEL.get(top_row["stops"], top_row["stops"])
+        top_price  = top_row["price"]
+        # Bandingkan dengan harga non-stop terbaik di hasil yang sama
+        nonstop = results[results["stops"] == "zero"]
+        if nonstop.empty:
+            return f'<span style="font-size:11px;color:#e8c84a;">⚡ Tidak ada non-stop — {stops_lbl} terbaik</span>'
+        cheapest_nonstop = nonstop["price"].min()
+        selisih = cheapest_nonstop - top_price
+        pct     = selisih / cheapest_nonstop * 100
+        return (
+            f'<span style="font-size:11px;color:#e8c84a;">'
+            f'⚡ {stops_lbl} lebih murah {format_inr(selisih)} ({pct:.0f}%) vs non-stop'
+            f'</span>'
+        )
+
+    insight_eco = _transit_insight(eco)
+    insight_biz = _transit_insight(biz)
+
     # Stat cards
     best_eco = format_inr(eco.iloc[0]["price"]) if not eco.empty else "—"
     best_biz = format_inr(biz.iloc[0]["price"]) if not biz.empty else "—"
+
+    best_eco_stops = STOPS_LABEL.get(eco.iloc[0]["stops"], "") if not eco.empty else ""
+    best_biz_stops = STOPS_LABEL.get(biz.iloc[0]["stops"], "") if not biz.empty else ""
+
     st.markdown(f"""
     <div class="stat-row">
       <div class="stat-card"><div class="stat-label">Rute</div>
         <div class="stat-value" style="color:#f0eeea;font-size:15px;">{src} → {dst}</div></div>
       <div class="stat-card"><div class="stat-label">Harga Eco Terbaik</div>
-        <div class="stat-value" style="color:#1D9E75;">{best_eco}</div></div>
+        <div class="stat-value" style="color:#1D9E75;">{best_eco}</div>
+        <div style="font-size:10px;color:#5a5870;margin-top:3px;">{best_eco_stops}</div>
+        {insight_eco}
+      </div>
       <div class="stat-card"><div class="stat-label">Harga Bisnis Terbaik</div>
-        <div class="stat-value" style="color:#7F77DD;">{best_biz}</div></div>
+        <div class="stat-value" style="color:#7F77DD;">{best_biz}</div>
+        <div style="font-size:10px;color:#5a5870;margin-top:3px;">{best_biz_stops}</div>
+        {insight_biz}
+      </div>
       <div class="stat-card"><div class="stat-label">Sisa Hari</div>
         <div class="stat-value" style="color:#e8c84a;">{days_left} hari</div></div>
     </div>
