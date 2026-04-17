@@ -1,6 +1,5 @@
 def normalize_stops(x):
-    x = str(x).lower()
-
+    x = str(x).lower().strip()
     if x in ["0 stops", "zero", "non-stop"]:
         return "Langsung"
     elif x in ["1 stop", "one"]:
