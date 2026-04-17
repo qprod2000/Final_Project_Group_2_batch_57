@@ -4,24 +4,19 @@
 # ============================================================
 
 import os
-import io
-import time
 import numpy as np  # type: ignore
 import pandas as pd # type: ignore
-import joblib   # type: ignore
 import streamlit as st  # type: ignore
 from sklearn.model_selection import train_test_split    # type: ignore
 from sklearn.ensemble import RandomForestRegressor  # type: ignore
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score   # type: ignore
 
 
 # ============================================================
 # CONFIG
 # ============================================================
 
-MODEL_PATH = "model/best_model.pkl"
-DATA_PATH  = "airlines_flights_data.csv"
-TOP_N      = 3
+DATA_PATH = "airlines_flights_data.csv"
+TOP_N     = 3
 
 STOPS_MAPPING = {"zero": 0, "one": 1, "two_or_more": 2}
 TIME_MAPPING  = {
@@ -65,8 +60,7 @@ def stops_color(stops_raw: str) -> str:
 
 def _preprocess(df_input: pd.DataFrame) -> pd.DataFrame:
     df = df_input.copy()
-    drop_cols = [c for c in ["index", "flight", "price"] if c in df.columns]
-    df = df.drop(columns=drop_cols)
+    df = df.drop(columns=[c for c in ["index", "flight", "price"] if c in df.columns])
     df["class"]          = df["class"].map(CLASS_MAPPING).fillna(0).astype(int)
     df["stops"]          = df["stops"].map(STOPS_MAPPING).fillna(0).astype(int)
     df["departure_time"] = df["departure_time"].map(TIME_MAPPING).fillna(0).astype(int)
@@ -83,8 +77,7 @@ def _preprocess(df_input: pd.DataFrame) -> pd.DataFrame:
     extra = [c for c in df.columns
              if (c.startswith("airline_") or c.startswith("source_city_")
                  or c.startswith("destination_city_")) and c not in expected_ohe]
-    df = df.drop(columns=extra, errors="ignore")
-    return df
+    return df.drop(columns=extra, errors="ignore")
 
 
 def _score_no_model(df_filtered: pd.DataFrame, days_left: int) -> pd.Series:
@@ -123,8 +116,8 @@ def find_best_flights(df, model, input_data, top_n=TOP_N):
             df_route["predicted_price"] = model.predict(X)
             sort_col = "predicted_price"
         except Exception:
-            df_route["predicted_price"] = df_route["price"]
-            sort_col = "price"
+            df_route["score"] = _score_no_model(df_route, days)
+            sort_col = "score"
     else:
         df_route["score"] = _score_no_model(df_route, days)
         sort_col = "score"
@@ -173,17 +166,13 @@ html, body, [class*="css"] { font-family: 'Syne', sans-serif !important; }
 .price-block  { text-align:right; }
 .price-main   { font-family:'DM Mono',monospace; font-size:16px; font-weight:500; color:#f0eeea; }
 .price-label  { font-size:10px; color:#5a5870; text-transform:uppercase; letter-spacing:0.4px; }
-.model-badge  { display:inline-flex; align-items:center; gap:6px; font-family:'DM Mono',monospace; font-size:11px; padding:4px 12px; border-radius:20px; }
-.model-ok     { background:rgba(29,158,117,0.12); color:#1D9E75; border:0.5px solid rgba(29,158,117,0.25); }
-.model-miss   { background:rgba(232,200,74,0.10); color:#e8c84a; border:0.5px solid rgba(232,200,74,0.25); }
-.model-err    { background:rgba(226,75,74,0.10);  color:#e24b4a; border:0.5px solid rgba(226,75,74,0.25); }
-.metric-box   { background:#13131a; border:0.5px solid rgba(255,255,255,0.08); border-radius:12px; padding:16px 18px; margin-bottom:10px; }
-.metric-name  { font-size:11px; text-transform:uppercase; letter-spacing:0.5px; color:#5a5870; margin-bottom:4px; }
-.metric-val   { font-family:'DM Mono',monospace; font-size:22px; font-weight:500; }
-.train-log    { font-family:'DM Mono',monospace; font-size:12px; color:#5a5870; background:#0c0c0f; border:0.5px solid rgba(255,255,255,0.06); border-radius:8px; padding:12px 16px; margin-top:8px; line-height:1.8; }
 </style>
 """, unsafe_allow_html=True)
 
+
+# ============================================================
+# LOAD DATA
+# ============================================================
 
 @st.cache_data(show_spinner="Memuat dataset...")
 def load_data():
@@ -194,25 +183,29 @@ def load_data():
     return df
 
 
-@st.cache_resource(show_spinner="Memuat model ML...")
-def load_model():
-    # Cari model: utama → legacy
-    candidates = [
-        "model/random_forest.pkl",
-        "model/best_model.pkl",
-    ]
-    for path in candidates:
-        if os.path.exists(path):
-            try:
-                mdl = joblib.load(path)
-                return mdl, "ok", f"Model dimuat dari `{path}`"
-            except Exception as e:
-                return None, "error", f"Gagal load model: {e}"
-    return None, "missing", "Belum ada model — pergi ke Train Model"
+# ============================================================
+# TRAIN MODEL — otomatis saat app load, di-cache selamanya
+# ============================================================
+
+@st.cache_resource(show_spinner="Melatih model Random Forest...")
+def train_model(data_path: str):
+    df = pd.read_csv(data_path)
+    df = df.drop(columns=[c for c in ["index", "flight"] if c in df.columns])
+    df["class"]          = df["class"].map(CLASS_MAPPING).fillna(0).astype(int)
+    df["stops"]          = df["stops"].map(STOPS_MAPPING).fillna(0).astype(int)
+    df["departure_time"] = df["departure_time"].map(TIME_MAPPING).fillna(0).astype(int)
+    df["arrival_time"]   = df["arrival_time"].map(TIME_MAPPING).fillna(0).astype(int)
+    X = pd.get_dummies(df.drop("price", axis=1),
+                       columns=["airline", "source_city", "destination_city"])
+    y = df["price"]
+    X_train, _, y_train, _ = train_test_split(X, y, test_size=0.2, random_state=42)
+    rf = RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=-1)
+    rf.fit(X_train, y_train)
+    return rf
 
 
-df                             = load_data()
-model, model_status, model_msg = load_model()
+df    = load_data()
+model = train_model(DATA_PATH)
 
 
 # ============================================================
@@ -228,318 +221,152 @@ with col_title:
         unsafe_allow_html=True,
     )
 with col_badge:
-    badge_cls = {"ok": "model-ok", "missing": "model-miss", "error": "model-err"}[model_status]
-    badge_ico = {"ok": "●", "missing": "◌", "error": "✕"}[model_status]
-    badge_txt = {"ok": "Model aktif", "missing": "Belum ada model", "error": "Model error"}[model_status]
     st.markdown(
-        f'<br><span class="model-badge {badge_cls}">{badge_ico} {badge_txt}</span>',
+        '<br><span style="display:inline-flex;align-items:center;gap:6px;'
+        'font-family:\'DM Mono\',monospace;font-size:11px;padding:4px 12px;border-radius:20px;'
+        'background:rgba(29,158,117,0.12);color:#1D9E75;border:0.5px solid rgba(29,158,117,0.25);">'
+        '● Random Forest aktif</span>',
         unsafe_allow_html=True,
     )
 
 st.markdown("---")
 
-tab_search, tab_train = st.tabs(["🔍 Cari Penerbangan", "🤖 Train Model"])
+
+# ============================================================
+# FORM
+# ============================================================
+
+col1, col2, col3 = st.columns([2, 2, 3])
+with col1:
+    src = st.selectbox("🛫 Kota Asal", sorted(CITIES), index=sorted(CITIES).index("Delhi"))
+with col2:
+    dst_opts = [c for c in sorted(CITIES) if c != src]
+    dst = st.selectbox("🛬 Kota Tujuan", dst_opts,
+                       index=dst_opts.index("Mumbai") if "Mumbai" in dst_opts else 0)
+with col3:
+    days_left = st.slider("📅 Sisa Hari Sebelum Keberangkatan", 1, 49, 10, 1)
+
+st.markdown("<br>", unsafe_allow_html=True)
+search = st.button("🔍 Cari Rekomendasi Terbaik", width="stretch", type="primary")
 
 
 # ============================================================
-# TAB 1 — Cari Penerbangan
+# RESULTS
 # ============================================================
 
-with tab_search:
+if search:
+    if src == dst:
+        st.error("⚠️ Kota asal dan tujuan tidak boleh sama.")
+        st.stop()
 
-    col1, col2, col3 = st.columns([2, 2, 3])
-    with col1:
-        src = st.selectbox("🛫 Kota Asal", sorted(CITIES), index=sorted(CITIES).index("Delhi"))
-    with col2:
-        dst_opts = [c for c in sorted(CITIES) if c != src]
-        dst = st.selectbox("🛬 Kota Tujuan", dst_opts,
-                           index=dst_opts.index("Mumbai") if "Mumbai" in dst_opts else 0)
-    with col3:
-        days_left = st.slider("📅 Sisa Hari Sebelum Keberangkatan", 1, 49, 10, 1)
+    with st.spinner("Menganalisis penerbangan..."):
+        eco, biz = find_best_flights(
+            df, model,
+            {"source_city": src, "destination_city": dst, "days_left": days_left},
+            TOP_N,
+        )
 
-    st.markdown("<br>", unsafe_allow_html=True)
-    search = st.button("🔍 Cari Rekomendasi Terbaik", width="stretch", type="primary")
+    if eco.empty and biz.empty:
+        st.warning(f"Tidak ada data untuk rute **{src} → {dst}**.")
+        st.stop()
 
-    if search:
-        if src == dst:
-            st.error("⚠️ Kota asal dan tujuan tidak boleh sama.")
-            st.stop()
-
-        with st.spinner("Menganalisis penerbangan..."):
-            eco, biz = find_best_flights(
-                df, model,
-                {"source_city": src, "destination_city": dst, "days_left": days_left},
-                TOP_N,
-            )
-
-        if eco.empty and biz.empty:
-            st.warning(f"Tidak ada data untuk rute **{src} → {dst}**.")
-            st.stop()
-
-        def _transit_insight(results):
-            if results.empty or results.iloc[0]["stops"] == "zero":
-                return ""
-            top_row   = results.iloc[0]
-            stops_lbl = STOPS_LABEL.get(top_row["stops"], top_row["stops"])
-            top_price = top_row["price"]
-            nonstop   = results[results["stops"] == "zero"]
-            if nonstop.empty:
-                return (f'<span style="font-size:11px;color:#e8c84a;">'
-                        f'⚡ Tidak ada non-stop — {stops_lbl} terbaik</span>')
-            selisih = nonstop["price"].min() - top_price
-            pct     = selisih / nonstop["price"].min() * 100
+    # Transit insight
+    def _transit_insight(results):
+        if results.empty or results.iloc[0]["stops"] == "zero":
+            return ""
+        top_row   = results.iloc[0]
+        stops_lbl = STOPS_LABEL.get(top_row["stops"], top_row["stops"])
+        nonstop   = results[results["stops"] == "zero"]
+        if nonstop.empty:
             return (f'<span style="font-size:11px;color:#e8c84a;">'
-                    f'⚡ {stops_lbl} lebih murah {format_inr(selisih)} ({pct:.0f}%) vs non-stop</span>')
+                    f'⚡ Tidak ada non-stop — {stops_lbl} terbaik</span>')
+        selisih = nonstop["price"].min() - top_row["price"]
+        pct     = selisih / nonstop["price"].min() * 100
+        return (f'<span style="font-size:11px;color:#e8c84a;">'
+                f'⚡ {stops_lbl} lebih murah {format_inr(selisih)} ({pct:.0f}%) vs non-stop</span>')
 
-        insight_eco    = _transit_insight(eco)
-        insight_biz    = _transit_insight(biz)
-        best_eco       = format_inr(eco.iloc[0]["price"]) if not eco.empty else "—"
-        best_biz       = format_inr(biz.iloc[0]["price"]) if not biz.empty else "—"
-        best_eco_stops = STOPS_LABEL.get(eco.iloc[0]["stops"], "") if not eco.empty else ""
-        best_biz_stops = STOPS_LABEL.get(biz.iloc[0]["stops"], "") if not biz.empty else ""
+    best_eco       = format_inr(eco.iloc[0]["price"]) if not eco.empty else "—"
+    best_biz       = format_inr(biz.iloc[0]["price"]) if not biz.empty else "—"
+    best_eco_stops = STOPS_LABEL.get(eco.iloc[0]["stops"], "") if not eco.empty else ""
+    best_biz_stops = STOPS_LABEL.get(biz.iloc[0]["stops"], "") if not biz.empty else ""
+    insight_eco    = _transit_insight(eco)
+    insight_biz    = _transit_insight(biz)
 
-        st.markdown(f"""
-        <div class="stat-row">
-          <div class="stat-card">
-            <div class="stat-label">Rute</div>
-            <div class="stat-value" style="color:#f0eeea;font-size:15px;">{src} → {dst}</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">Harga Eco Terbaik</div>
-            <div class="stat-value" style="color:#1D9E75;">{best_eco}</div>
-            <div style="font-size:10px;color:#5a5870;margin-top:3px;">{best_eco_stops}</div>
-            {insight_eco}
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">Harga Bisnis Terbaik</div>
-            <div class="stat-value" style="color:#7F77DD;">{best_biz}</div>
-            <div style="font-size:10px;color:#5a5870;margin-top:3px;">{best_biz_stops}</div>
-            {insight_biz}
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">Sisa Hari</div>
-            <div class="stat-value" style="color:#e8c84a;">{days_left} hari</div>
-          </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-        def render_section(results, kelas):
-            if results.empty:
-                st.info(f"Tidak ada hasil kelas {kelas}.")
-                return
-            dot_color = "#1D9E75" if kelas == "Economy" else "#7F77DD"
-            label     = "Ekonomi" if kelas == "Economy" else "Bisnis"
-            st.markdown(f"""
-            <div class="section-hd">
-              <span class="dot" style="background:{dot_color};box-shadow:0 0 8px {dot_color}88;"></span>
-              <span class="section-label">{label} — Top {TOP_N}</span>
-            </div>""", unsafe_allow_html=True)
-
-            for rank, (_, row) in enumerate(results.iterrows(), start=1):
-                top1_cls   = "top1" if rank == 1 else ""
-                rank_cls   = "gold" if rank == 1 else ""
-                sc         = stops_color(row["stops"])
-                sl         = STOPS_LABEL.get(row["stops"], row["stops"])
-                dep        = TIME_LABEL.get(row.get("departure_time", ""), "")
-                arr        = TIME_LABEL.get(row.get("arrival_time", ""), "")
-                time_str   = f"{dep} → {arr}" if arr else dep
-                dur_str    = format_duration(row["duration"])
-                price_str  = format_inr(row["price"])
-                airline_nm = row["airline"].replace("_", " ")
-                pred_html  = ""
-                if model_status == "ok" and "predicted_price" in row.index:
-                    pred_html = (f'<div class="price-label" style="margin-top:4px;">'
-                                 f'prediksi: {format_inr(row["predicted_price"])}</div>')
-                st.markdown(f"""
-                <div class="flight-card {top1_cls}">
-                  <div class="rank-badge {rank_cls}">{str(rank).zfill(2)}</div>
-                  <div class="card-body">
-                    <div>
-                      <span class="card-airline">{airline_nm}</span>
-                      <span class="card-time">{time_str}</span>
-                    </div>
-                    <div style="margin-top:6px;">
-                      <span class="chip" style="color:{sc};background:rgba(0,0,0,0.2);border-color:{sc}44;">{sl}</span>
-                      <span class="chip">⏱ {dur_str}</span>
-                      <span class="chip">✈️ {row['flight']}</span>
-                    </div>
-                  </div>
-                  <div class="price-block">
-                    <div class="price-main">{price_str}</div>
-                    <div class="price-label">harga aktual</div>
-                    {pred_html}
-                  </div>
-                </div>""", unsafe_allow_html=True)
-
-        col_eco, col_biz = st.columns(2, gap="large")
-        with col_eco:
-            render_section(eco, "Economy")
-        with col_biz:
-            render_section(biz, "Business")
-
-
-
-
-# ============================================================
-# TAB 2 — Train Model
-# ============================================================
-
-with tab_train:
-
-    st.markdown('<div class="app-title">Train Model</div>', unsafe_allow_html=True)
-    st.markdown(
-        '<div class="app-subtitle">Latih Random Forest dari dataset, lalu download file .pkl</div>',
-        unsafe_allow_html=True,
-    )
-    st.markdown("---")
-
-    st.markdown("""
-    <div style="background:#13131a;border:0.5px solid rgba(255,255,255,0.08);
-                border-radius:12px;padding:16px 20px;margin-bottom:20px;">
-      <div style="font-size:13px;color:#9593a0;line-height:1.8;">
-        Klik tombol di bawah — sistem akan otomatis:
-        <span style="color:#f0eeea;">① Preprocessing data</span> →
-        <span style="color:#1D9E75;">② Latih Random Forest</span> →
-        <span style="color:#e8c84a;">③ Evaluasi model</span> →
-        <span style="color:#f0eeea;">④ Simpan sebagai <code>model/random_forest.pkl</code></span>
+    st.markdown(f"""
+    <div class="stat-row">
+      <div class="stat-card">
+        <div class="stat-label">Rute</div>
+        <div class="stat-value" style="color:#f0eeea;font-size:15px;">{src} → {dst}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Harga Eco Terbaik</div>
+        <div class="stat-value" style="color:#1D9E75;">{best_eco}</div>
+        <div style="font-size:10px;color:#5a5870;margin-top:3px;">{best_eco_stops}</div>
+        {insight_eco}
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Harga Bisnis Terbaik</div>
+        <div class="stat-value" style="color:#7F77DD;">{best_biz}</div>
+        <div style="font-size:10px;color:#5a5870;margin-top:3px;">{best_biz_stops}</div>
+        {insight_biz}
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Sisa Hari</div>
+        <div class="stat-value" style="color:#e8c84a;">{days_left} hari</div>
       </div>
     </div>
     """, unsafe_allow_html=True)
 
-    with st.expander("⚙️ Parameter Training (opsional)", expanded=False):
-        col_a, col_b, col_c = st.columns(3)
-        with col_a:
-            test_size    = st.slider("Test Set (%)", 10, 30, 20, 5)
-        with col_b:
-            n_estimators = st.slider("n_estimators", 50, 300, 100, 50)
-        with col_c:
-            random_state = st.number_input("Random State", value=42, step=1)
+    def render_section(results, kelas):
+        if results.empty:
+            st.info(f"Tidak ada hasil kelas {kelas}.")
+            return
+        dot_color = "#1D9E75" if kelas == "Economy" else "#7F77DD"
+        label     = "Ekonomi" if kelas == "Economy" else "Bisnis"
+        st.markdown(f"""
+        <div class="section-hd">
+          <span class="dot" style="background:{dot_color};box-shadow:0 0 8px {dot_color}88;"></span>
+          <span class="section-label">{label} — Top {TOP_N}</span>
+        </div>""", unsafe_allow_html=True)
 
-    st.markdown("<br>", unsafe_allow_html=True)
-    train_btn = st.button("🚀 Mulai Training", width="stretch", type="primary")
-
-    if train_btn:
-        log_lines    = []
-        progress_bar = st.progress(0, text="Menyiapkan data...")
-        log_box      = st.empty()
-
-        def log(msg):
-            log_lines.append(msg)
-            log_box.markdown(
-                '<div class="train-log">' + "<br>".join(log_lines) + "</div>",
-                unsafe_allow_html=True,
-            )
-
-        # 1. Preprocessing
-        log("⟳ Preprocessing data...")
-        train_df = df.copy()
-        train_df = train_df.drop(columns=[c for c in ["index", "flight"] if c in train_df.columns])
-        train_df["class"]          = train_df["class"].map(CLASS_MAPPING).fillna(0).astype(int)
-        train_df["stops"]          = train_df["stops"].map(STOPS_MAPPING).fillna(0).astype(int)
-        train_df["departure_time"] = train_df["departure_time"].map(TIME_MAPPING).fillna(0).astype(int)
-        train_df["arrival_time"]   = train_df["arrival_time"].map(TIME_MAPPING).fillna(0).astype(int)
-        X = pd.get_dummies(
-            train_df.drop("price", axis=1),
-            columns=["airline", "source_city", "destination_city"],
-        )
-        y = train_df["price"]
-
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=test_size / 100, random_state=int(random_state)
-        )
-        progress_bar.progress(15, text="Melatih Random Forest...")
-        log(f"✓ {len(train_df):,} baris · {X.shape[1]} fitur · "
-            f"train={len(X_train):,} test={len(X_test):,}")
-
-        # 2. Train
-        log(f"⟳ Melatih Random Forest · n_estimators={n_estimators}...")
-        t0 = time.time()
-        rf = RandomForestRegressor(
-            n_estimators=int(n_estimators),
-            random_state=int(random_state),
-            n_jobs=-1,
-        )
-        rf.fit(X_train, y_train)
-        elapsed = time.time() - t0
-        progress_bar.progress(80, text="Mengevaluasi model...")
-        log(f"✓ Training selesai dalam {elapsed:.1f} detik")
-
-        # 3. Evaluasi
-        y_pred   = rf.predict(X_test)
-        r2       = r2_score(y_test, y_pred)
-        r2_train = rf.score(X_train, y_train)
-        mae      = mean_absolute_error(y_test, y_pred)
-        rmse     = np.sqrt(mean_squared_error(y_test, y_pred))
-        log(f"✓ R²={r2:.4f} · MAE=₹{mae:,.0f} · RMSE=₹{rmse:,.0f}")
-
-        # 4. Simpan
-        progress_bar.progress(95, text="Menyimpan model...")
-        os.makedirs("model", exist_ok=True)
-        fpath = "model/random_forest.pkl"
-        joblib.dump(rf, fpath)
-
-        buf = io.BytesIO()
-        joblib.dump(rf, buf)
-        buf.seek(0)
-        model_bytes = buf.read()
-
-        progress_bar.progress(100, text="Selesai!")
-        log(f"✓ Disimpan → {fpath} ({len(model_bytes)/1024:.1f} KB)")
-
-        # ── Metrik ───────────────────────────────────────────
-        st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown("#### 📊 Hasil Evaluasi")
-
-        m1, m2, m3, m4 = st.columns(4)
-        with m1:
+        for rank, (_, row) in enumerate(results.iterrows(), start=1):
+            top1_cls   = "top1" if rank == 1 else ""
+            rank_cls   = "gold" if rank == 1 else ""
+            sc         = stops_color(row["stops"])
+            sl         = STOPS_LABEL.get(row["stops"], row["stops"])
+            dep        = TIME_LABEL.get(row.get("departure_time", ""), "")
+            arr        = TIME_LABEL.get(row.get("arrival_time", ""), "")
+            time_str   = f"{dep} → {arr}" if arr else dep
+            dur_str    = format_duration(row["duration"])
+            price_str  = format_inr(row["price"])
+            airline_nm = row["airline"].replace("_", " ")
+            pred_html  = ""
+            if "predicted_price" in row.index:
+                pred_html = (f'<div class="price-label" style="margin-top:4px;">'
+                             f'prediksi: {format_inr(row["predicted_price"])}</div>')
             st.markdown(f"""
-            <div class="metric-box">
-              <div class="metric-name">R² Score (Test)</div>
-              <div class="metric-val" style="color:#1D9E75;">{r2:.4f}</div>
-            </div>""", unsafe_allow_html=True)
-        with m2:
-            st.markdown(f"""
-            <div class="metric-box">
-              <div class="metric-name">R² Score (Train)</div>
-              <div class="metric-val" style="color:#7F77DD;">{r2_train:.4f}</div>
-            </div>""", unsafe_allow_html=True)
-        with m3:
-            st.markdown(f"""
-            <div class="metric-box">
-              <div class="metric-name">MAE</div>
-              <div class="metric-val" style="color:#f0eeea;">₹{mae:,.0f}</div>
-            </div>""", unsafe_allow_html=True)
-        with m4:
-            st.markdown(f"""
-            <div class="metric-box">
-              <div class="metric-name">RMSE</div>
-              <div class="metric-val" style="color:#f0eeea;">₹{rmse:,.0f}</div>
+            <div class="flight-card {top1_cls}">
+              <div class="rank-badge {rank_cls}">{str(rank).zfill(2)}</div>
+              <div class="card-body">
+                <div>
+                  <span class="card-airline">{airline_nm}</span>
+                  <span class="card-time">{time_str}</span>
+                </div>
+                <div style="margin-top:6px;">
+                  <span class="chip" style="color:{sc};background:rgba(0,0,0,0.2);border-color:{sc}44;">{sl}</span>
+                  <span class="chip">⏱ {dur_str}</span>
+                  <span class="chip">✈️ {row['flight']}</span>
+                </div>
+              </div>
+              <div class="price-block">
+                <div class="price-main">{price_str}</div>
+                <div class="price-label">harga aktual</div>
+                {pred_html}
+              </div>
             </div>""", unsafe_allow_html=True)
 
-        # ── Feature Importance ────────────────────────────────
-        fi = pd.DataFrame({
-            "Fitur":      X_train.columns,
-            "Importance": rf.feature_importances_,
-        }).sort_values("Importance", ascending=False).head(10)
-        with st.expander("🔍 Top 10 Feature Importance"):
-            st.dataframe(fi.reset_index(drop=True), width="stretch")
-
-        # ── Download ──────────────────────────────────────────
-        st.markdown("<br>", unsafe_allow_html=True)
-        st.success(f"✅ Model disimpan ke `{fpath}` · R²={r2:.4f}")
-
-        st.download_button(
-            label="⬇️ Download random_forest.pkl",
-            data=model_bytes,
-            file_name="random_forest.pkl",
-            mime="application/octet-stream",
-            width="stretch",
-        )
-
-        st.info(
-            "Setelah download, letakkan `random_forest.pkl` ke folder `model/` "
-            "lalu refresh halaman — model akan otomatis aktif.",
-            icon="💡",
-        )
-
-        st.cache_resource.clear()
+    col_eco, col_biz = st.columns(2, gap="large")
+    with col_eco:
+        render_section(eco, "Economy")
+    with col_biz:
+        render_section(biz, "Business")
