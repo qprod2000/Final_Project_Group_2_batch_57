@@ -95,65 +95,91 @@ def find_best_flights(df, model, input_data, top_n=3):
 
     df_work["price"] = preds
 
-    # =========================
-    # BALANCED SCORING
-    # =========================
-    df_work["price_norm"] = (
-        (df_work["price"] - df_work["price"].min()) /
-        (df_work["price"].max() - df_work["price"].min() + 1e-6)
-    )
-
-    df_work["duration_norm"] = (
-        (df_work["duration"] - df_work["duration"].min()) /
-        (df_work["duration"].max() - df_work["duration"].min() + 1e-6)
-    )
-
-    stops_weight = {
-        "Langsung": 0.0,
-        "1 Transit": 0.2,
-        "2 Transit": 0.4
-    }
-
-    df_work["stops_penalty"] = df_work["stops_clean"].map(stops_weight)
-
-    df_work["score"] = (
-        df_work["price_norm"] * 0.6 +
-        df_work["duration_norm"] * 0.3 +
-        df_work["stops_penalty"] * 0.1
-    )
-
-    df_work = df_work.sort_values("score")
-
-    eco = df_work[df_work["class"].str.lower() == "economy"].head(top_n)
-    biz = df_work[df_work["class"].str.lower() == "business"].head(top_n)
-
-    return eco, biz
-
-
 # =========================
-# INSIGHT
+# TRUE BALANCED SCORING 🔥
 # =========================
+df_work["price_norm"] = (
+    (df_work["price"] - df_work["price"].min()) /
+    (df_work["price"].max() - df_work["price"].min() + 1e-6)
+)
+
+df_work["duration_norm"] = (
+    (df_work["duration"] - df_work["duration"].min()) /
+    (df_work["duration"].max() - df_work["duration"].min() + 1e-6)
+)
+
+# 🔥 transit tidak terlalu dihukum
+stops_weight = {
+    "Langsung": 0.0,
+    "1 Transit": 0.1,
+    "2 Transit": 0.2
+}
+
+df_work["stops_penalty"] = df_work["stops_clean"].map(stops_weight)
+
+# 🔥 final score (lebih realistis)
+df_work["score"] = (
+    df_work["price_norm"] * 0.55 +
+    df_work["duration_norm"] * 0.30 +
+    df_work["stops_penalty"] * 0.15
+)
+
+
 def generate_insight(eco, biz):
 
     insights = []
 
-    if not eco.empty and not biz.empty:
+    if eco.empty or biz.empty:
+        return ["Tidak cukup data untuk analisis"]
 
-        eco_best = eco.iloc[0]
-        biz_best = biz.iloc[0]
+    eco_best = eco.iloc[0]
+    biz_best = biz.iloc[0]
 
-        price_diff = biz_best["price"] - eco_best["price"]
-        time_diff = eco_best["duration"] - biz_best["duration"]
+    price_diff = biz_best["price"] - eco_best["price"]
+    time_diff = eco_best["duration"] - biz_best["duration"]
 
-        if price_diff > 0 and time_diff > 0:
+    # =========================
+    # 💺 BUSINESS VS ECONOMY
+    # =========================
+    if price_diff > 0:
+
+        percent_price = (price_diff / eco_best["price"]) * 100
+
+        if time_diff > 0:
             insights.append(
-                f"💡 Upgrade ke Bisnis: tambah {format_inr(price_diff)} untuk hemat {int(time_diff*60)} menit"
+                f"💺 Bisnis lebih cepat {int(time_diff*60)} menit dengan tambahan {format_inr(price_diff)} (+{percent_price:.1f}%)"
             )
 
-        if eco_best["stops_clean"] != "Langsung":
-            insights.append("💡 Transit memberikan opsi harga lebih hemat")
+            if percent_price < 20:
+                insights.append("🔥 Upgrade ke Bisnis tergolong worth it")
+            else:
+                insights.append("⚖️ Upgrade ke Bisnis kurang optimal dari sisi harga")
 
-        insights.append("🎯 AI memilih berdasarkan harga, waktu, dan jumlah transit")
+        else:
+            insights.append("⚠️ Bisnis tidak memberikan keuntungan waktu signifikan")
+
+    # =========================
+    # ✈️ TRANSIT ANALYSIS
+    # =========================
+    if eco_best["stops_clean"] != "Langsung":
+
+        insights.append(
+            f"✈️ Rekomendasi terbaik menggunakan {eco_best['stops_clean']} karena harga lebih kompetitif"
+        )
+
+        if eco_best["stops_clean"] == "2 Transit":
+            insights.append("⚠️ Perjalanan cukup panjang, pertimbangkan kenyamanan")
+
+    else:
+        insights.append("⚡ Penerbangan langsung masih menjadi pilihan paling efisien")
+
+    # =========================
+    # 🎯 FINAL RECOMMENDATION
+    # =========================
+    if price_diff < 0:
+        insights.append("🔥 Kelas Bisnis justru lebih murah pada kondisi ini (anomali harga)")
+    else:
+        insights.append("🎯 Ekonomi tetap menjadi pilihan paling hemat secara keseluruhan")
 
     return insights
 
