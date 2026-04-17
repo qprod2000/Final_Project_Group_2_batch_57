@@ -11,7 +11,7 @@ display_map = {
     "0 stops": "Langsung",
     "1 stop": "1 Transit",
     "2 stops": "2 Transit",
-    "3 stops": "3 Transit",
+    "2+ stops": "2+ Transit",
     "zero": "Langsung",
     "one": "1 Transit",
     "two": "2 Transit",
@@ -21,16 +21,18 @@ display_map = {
 input_stops_map = {
     "zero": "Langsung",
     "one": "1 Transit",
+    "two": "2 Transit",
     "two or more": "2+ Transit",
     "0 stops": "Langsung",
     "1 stop": "1 Transit",
     "2 stops": "2 Transit",
+    "2+ stops": "2+ Transit",
 }
 
 reverse_input_map = {
     "Langsung": "zero",
     "1 Transit": "one",
-    "2 Transit": "two or more",
+    "2 Transit": "two",
     "2+ Transit": "two or more",
 }
 
