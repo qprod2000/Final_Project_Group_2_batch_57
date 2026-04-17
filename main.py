@@ -172,7 +172,7 @@ input_data["stops"] = selected
 # =========================
 # DAYS
 # =========================
-input_data["days_left"] = st.slider("Sisa Hari", 0.0, 30.0, 10.0, step=0.5)
+input_data["days_left"] = st.slider("Sisa Hari", 0, 30, 10, step=1)
 
 # =========================
 # RUN
