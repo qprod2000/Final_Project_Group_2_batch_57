@@ -6,9 +6,7 @@ from config import MODEL_PATH, TOP_N
 from utils import format_duration, format_inr
 from engine import find_best_flights
 
-# =========================
-# LOAD
-# =========================
+
 @st.cache_data
 def load_data():
     df = pd.read_csv("airlines_flights_data.csv")
@@ -30,7 +28,7 @@ def load_model():
 # UI
 # =========================
 st.set_page_config(page_title="AI Flight Optimizer", layout="wide")
-st.title("✈️ AI Flight Optimizer (Production Ready)")
+st.title("✈️ AI Flight Optimizer (Final Stable)")
 
 df = load_data()
 model = load_model()
@@ -57,20 +55,18 @@ if st.button("🚀 Cari Rekomendasi Terbaik"):
 
     eco, biz = find_best_flights(df, model, input_data, TOP_N)
 
-    st.subheader("💰 Top Ekonomi")
+    st.subheader("💰 Top 3 Ekonomi")
     for _, r in eco.iterrows():
         st.write(
             f"✈️ {r['airline']} ({r['flight']}) | "
-            f"{r['stops_clean']} | "
-            f"{format_duration(r['duration'])} | "
-            f"{format_inr(r['price'])}"
+            f"{r['stops_clean']} | ⏱ {format_duration(r['duration'])} | "
+            f"💰 {format_inr(r['price'])}"
         )
 
-    st.subheader("💺 Top Bisnis")
+    st.subheader("💺 Top 3 Bisnis")
     for _, r in biz.iterrows():
         st.write(
             f"✈️ {r['airline']} ({r['flight']}) | "
-            f"{r['stops_clean']} | "
-            f"{format_duration(r['duration'])} | "
-            f"{format_inr(r['price'])}"
+            f"{r['stops_clean']} | ⏱ {format_duration(r['duration'])} | "
+            f"💰 {format_inr(r['price'])}"
         )
