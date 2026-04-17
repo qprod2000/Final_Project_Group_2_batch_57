@@ -1,85 +1,39 @@
 import pandas as pd # type: ignore
-from utils import normalize_stops
+import numpy as np  # type: ignore
 
-
-def find_best_flights(df, model, input_data, top_n=3):
-
+def find_best_flights(df, model, input_data, preference=50):
     df = df.copy()
 
-    # =========================
-    # NORMALIZE STOPS
-    # =========================
-    df["stops_clean"] = df["stops"].apply(normalize_stops)
+    # Sampling biar cepat
+    df = df.sample(min(300, len(df)), random_state=42)
 
-    # =========================
-    # STRATIFIED SAMPLING
-    # =========================
-    df_work = (
-        df.groupby("stops_clean", group_keys=False)
-        .apply(lambda x: x.sample(min(60, len(x)), random_state=42))
-    )
+    # Predict price
+    df["predicted_price"] = model.predict(df[input_data.keys()])
 
-    # 🔥 WAJIB RECREATE (ANTI ERROR)
-    df_work["stops_clean"] = df_work["stops"].apply(normalize_stops)
+    # Baseline (untuk perbandingan)
+    base_price = df["price"].mean()
+    base_duration = df["duration"].mean()
 
-    # =========================
-    # PREPARE PREDICTION
-    # =========================
-    df_pred = df_work.copy()
+    # Hitung value score
+    penalty = 20 + (100 - preference)
 
-    for k, v in input_data.items():
-        df_pred[k] = v
+    df["price_saving"] = base_price - df["price"]
+    df["extra_time"] = df["duration"] - base_duration
 
-    if hasattr(model, "feature_names_in_"):
-        for col in model.feature_names_in_:
-            if col not in df_pred.columns:
-                df_pred[col] = 0
+    df["value_score"] = df["price_saving"] - (df["extra_time"] * penalty)
 
-        df_pred = df_pred[model.feature_names_in_]
+    # Pisahkan kelas
+    eco = df[df["class"] == "Economy"].sort_values("value_score", ascending=False).head(3)
+    biz = df[df["class"] == "Business"].sort_values("value_score", ascending=False).head(3)
 
-    preds = model.predict(df_pred)
-    df_work["price"] = preds
+    return eco, biz, base_price, base_duration
 
-    # =========================
-    # NORMALIZATION
-    # =========================
-    df_work["price_norm"] = (
-        (df_work["price"] - df_work["price"].min()) /
-        (df_work["price"].max() - df_work["price"].min() + 1e-6)
-    )
 
-    df_work["duration_norm"] = (
-        (df_work["duration"] - df_work["duration"].min()) /
-        (df_work["duration"].max() - df_work["duration"].min() + 1e-6)
-    )
+def explain(row, base_price, base_duration):
+    saving = base_price - row["price"]
+    extra_time = row["duration"] - base_duration
 
-    # =========================
-    # 🔥 TRANSIT BONUS (VECTOR SAFE)
-    # =========================
-    transit_map = {
-        "Langsung": 0,
-        "1 Transit": -0.05,
-        "2 Transit": -0.08
-    }
-
-    df_work["transit_bonus"] = (
-        df_work["stops_clean"]
-        .map(transit_map)
-        .fillna(-0.05)
-    )
-
-    # =========================
-    # 🔥 VALUE-BASED SCORE
-    # =========================
-    df_work["score"] = (
-        df_work["price_norm"] +
-        (df_work["duration_norm"] * 0.6) +
-        df_work["transit_bonus"]
-    )
-
-    df_work = df_work.sort_values("score")
-
-    eco = df_work[df_work["class"].str.lower() == "economy"].head(top_n)
-    biz = df_work[df_work["class"].str.lower() == "business"].head(top_n)
-
-    return eco, biz
+    if saving > 0:
+        return f"Hemat ₹{int(saving)} (+{extra_time:.1f} jam)"
+    else:
+        return f"Lebih cepat ({abs(extra_time):.1f} jam lebih singkat)"
