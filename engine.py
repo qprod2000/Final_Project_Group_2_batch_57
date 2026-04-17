@@ -1,9 +1,14 @@
-import pandas as pd #type: ignore
+import pandas as pd # type: ignore
 from utils import normalize_stops
+
 
 def find_best_flights(df, model, input_data, top_n=3):
 
     df = df.copy()
+
+    # =========================
+    # NORMALIZE STOPS
+    # =========================
     df["stops_clean"] = df["stops"].apply(normalize_stops)
 
     # =========================
@@ -14,8 +19,11 @@ def find_best_flights(df, model, input_data, top_n=3):
         .apply(lambda x: x.sample(min(60, len(x)), random_state=42))
     )
 
+    # 🔥 WAJIB RECREATE (ANTI ERROR)
+    df_work["stops_clean"] = df_work["stops"].apply(normalize_stops)
+
     # =========================
-    # PREDICTION
+    # PREPARE PREDICTION
     # =========================
     df_pred = df_work.copy()
 
@@ -33,7 +41,7 @@ def find_best_flights(df, model, input_data, top_n=3):
     df_work["price"] = preds
 
     # =========================
-    # VALUE-BASED SCORING 🔥
+    # NORMALIZATION
     # =========================
     df_work["price_norm"] = (
         (df_work["price"] - df_work["price"].min()) /
@@ -45,18 +53,29 @@ def find_best_flights(df, model, input_data, top_n=3):
         (df_work["duration"].max() - df_work["duration"].min() + 1e-6)
     )
 
-    def transit_bonus(row):
-        if row["stops_clean"] == "Langsung":
-            return 0
-        elif row["stops_clean"] == "1 Transit":
-            return -0.05
-        else:
-            return -0.08
+    # =========================
+    # 🔥 TRANSIT BONUS (VECTOR SAFE)
+    # =========================
+    transit_map = {
+        "Langsung": 0,
+        "1 Transit": -0.05,
+        "2 Transit": -0.08
+    }
 
+    df_work["transit_bonus"] = (
+        df_work["stops_clean"]
+        .map(transit_map)
+        .fillna(-0.05)
+    )
+
+    # =========================
+    # 🔥 VALUE-BASED SCORE
+    # =========================
     df_work["score"] = (
         df_work["price_norm"] +
-        (df_work["duration_norm"] * 0.6)
-    ) + df_work.apply(transit_bonus, axis=1)
+        (df_work["duration_norm"] * 0.6) +
+        df_work["transit_bonus"]
+    )
 
     df_work = df_work.sort_values("score")
 
